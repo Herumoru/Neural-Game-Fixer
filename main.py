@@ -1,9 +1,12 @@
 import customtkinter as ctk
 import os
+import sys
 import json
 import re
 import string
 import webbrowser
+import requests
+from tkinter import filedialog, messagebox
 
 # Couleurs Cyberpunk
 CYAN = "#00f3ff"
@@ -12,6 +15,23 @@ DARK_BG = "#0d0221"
 GREEN = "#39ff14"
 
 PLACEHOLDER_SOLUTION = "ÉCRIVEZ LA SOLUTION ICI..."
+
+# ⚠️ À CONFIGURER : remplace par l'URL "raw" de ton bugs_data.json sur GitHub
+# (sur GitHub : ouvre bugs_data.json > bouton "Raw" > copie l'URL)
+URL_GITHUB_RAW = "https://raw.githubusercontent.com/Herumoru/Neural-Game-Fixer/main/bugs_data.json"
+
+
+def chemin_base_donnees():
+    """Retourne le chemin de bugs_data.json à côté du script OU de l'exécutable .exe,
+    peu importe le dossier depuis lequel l'appli est lancée."""
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, "bugs_data.json")
+
+
+CHEMIN_DB = chemin_base_donnees()
 
 
 class GameFixerApp(ctk.CTk):
@@ -25,6 +45,9 @@ class GameFixerApp(ctk.CTk):
 
         # FIX : évite un AttributeError si "Réparer" est cliqué avant tout scan
         self.jeu_detecte_actuel = None
+
+        # Nom du jeu actuellement en cours de modification (None = mode ajout)
+        self.jeu_en_edition = None
 
         # 1. Configuration des onglets
         self.tabs = ctk.CTkTabview(self,
@@ -61,6 +84,7 @@ class GameFixerApp(ctk.CTk):
         self.setup_scan_tab()
         self.setup_community_tab()
         self.mettre_a_jour_compteur()
+        self.rafraichir_liste_communaute()
 
     # ---------------------------------------------------------------
     # ONGLET SCANNER
@@ -235,35 +259,76 @@ class GameFixerApp(ctk.CTk):
     # ---------------------------------------------------------------
 
     def setup_community_tab(self):
-        """Interface de contribution stylisée"""
-        ctk.CTkLabel(self.tab_commu, text="--- AJOUTER UN JEU À LA BASE ---",
-                    font=("Consolas", 16, "bold"), text_color=MAGENTA).pack(pady=20)
+        """Interface de contribution + gestion (modifier/supprimer) de la base"""
+        ctk.CTkLabel(self.tab_commu, text="--- AJOUTER / MODIFIER UN JEU ---",
+                    font=("Consolas", 16, "bold"), text_color=MAGENTA).pack(pady=(12, 8))
 
-        style_champ = {"width": 400, "height": 40, "fg_color": "black", "border_color": "#301050"}
+        style_champ = {"width": 400, "height": 36, "fg_color": "black", "border_color": "#301050"}
 
         self.ent_jeu = ctk.CTkEntry(self.tab_commu, placeholder_text="NOM DU DOSSIER (ex: Cyberpunk 2077)", **style_champ)
-        self.ent_jeu.pack(pady=10)
+        self.ent_jeu.pack(pady=6)
 
         self.ent_id = ctk.CTkEntry(self.tab_commu, placeholder_text="ID STEAM DU JEU", **style_champ)
-        self.ent_id.pack(pady=10)
+        self.ent_id.pack(pady=6)
 
         self.ent_bug = ctk.CTkEntry(self.tab_commu, placeholder_text="DESCRIPTION DU SYMPTÔME", **style_champ)
-        self.ent_bug.pack(pady=10)
+        self.ent_bug.pack(pady=6)
 
-        self.txt_sol = ctk.CTkTextbox(self.tab_commu, width=400, height=100,
+        self.txt_sol = ctk.CTkTextbox(self.tab_commu, width=400, height=70,
                                       fg_color="black", border_color="#301050", border_width=2)
-        self.txt_sol.pack(pady=10)
+        self.txt_sol.pack(pady=6)
         self.txt_sol.insert("0.0", PLACEHOLDER_SOLUTION)
         # FIX : le placeholder ne s'effaçait jamais et pouvait finir enregistré comme vraie solution
         self.txt_sol.bind("<FocusIn>", self._effacer_placeholder_solution)
         self.txt_sol.bind("<FocusOut>", self._restaurer_placeholder_solution)
 
-        self.btn_save = ctk.CTkButton(self.tab_commu, text="VALIDER L'INJECTION",
+        boutons_form = ctk.CTkFrame(self.tab_commu, fg_color="transparent")
+        boutons_form.pack(pady=8)
+
+        self.btn_save = ctk.CTkButton(boutons_form, text="VALIDER L'INJECTION",
                                       fg_color="transparent", border_color=MAGENTA, border_width=2,
                                       text_color=MAGENTA, hover_color="#2e002e",
                                       font=("Consolas", 14, "bold"),
                                       command=self.ajouter_bug_commu)
-        self.btn_save.pack(pady=20)
+        self.btn_save.pack(side="left", padx=5)
+
+        self.btn_annuler = ctk.CTkButton(boutons_form, text="✖ ANNULER", fg_color="#444444",
+                                         command=self.annuler_edition)
+        # Caché tant qu'on n'édite pas une entrée existante
+
+        # --- Partage manuel de la base (export/import JSON) ---
+        boutons_partage = ctk.CTkFrame(self.tab_commu, fg_color="transparent")
+        boutons_partage.pack(pady=(0, 8))
+
+        ctk.CTkButton(boutons_partage, text="📤 EXPORTER LA BASE", fg_color="transparent",
+                     border_color=CYAN, border_width=2, text_color=CYAN,
+                     command=self.exporter_base).pack(side="left", padx=5)
+
+        ctk.CTkButton(boutons_partage, text="📥 IMPORTER UNE BASE", fg_color="transparent",
+                     border_color=CYAN, border_width=2, text_color=CYAN,
+                     command=self.importer_base).pack(side="left", padx=5)
+
+        ctk.CTkButton(boutons_partage, text="🔄 SYNC GITHUB", fg_color="transparent",
+                     border_color=MAGENTA, border_width=2, text_color=MAGENTA,
+                     command=self.synchroniser_github).pack(side="left", padx=5)
+
+        # --- Recherche + liste de la base actuelle ---
+        self.ent_recherche = ctk.CTkEntry(self.tab_commu, placeholder_text="🔎 Rechercher un jeu dans la base...",
+                                          width=400, height=32, fg_color="black", border_color=CYAN)
+        self.ent_recherche.pack(pady=(10, 6))
+        self.ent_recherche.bind("<KeyRelease>", lambda e: self.rafraichir_liste_communaute(self.ent_recherche.get()))
+
+        self.scrollable_frame_commu = ctk.CTkScrollableFrame(
+            self.tab_commu,
+            label_text="📚 BASE ACTUELLE",
+            label_font=("Consolas", 12, "bold"),
+            label_text_color=CYAN,
+            fg_color="#0a0b10",
+            corner_radius=10,
+            border_width=1,
+            border_color=CYAN,
+        )
+        self.scrollable_frame_commu.pack(pady=(0, 10), padx=15, fill="both", expand=True)
 
     def _effacer_placeholder_solution(self, event=None):
         if self.txt_sol.get("0.0", "end").strip() == PLACEHOLDER_SOLUTION:
@@ -286,25 +351,205 @@ class GameFixerApp(ctk.CTk):
 
         try:
             data = self.charger_base_de_donnees()
+
+            # Si on modifiait une entrée et que le nom a changé, on retire l'ancienne
+            # clé pour ne pas laisser un doublon derrière soi
+            if self.jeu_en_edition and self.jeu_en_edition != jeu:
+                data.pop(self.jeu_en_edition, None)
+
             data[jeu] = {"id": steam_id, "bug": bug, "solution": sol}
 
-            with open("bugs_data.json", "w", encoding="utf-8") as f:
+            with open(CHEMIN_DB, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
 
-            self.btn_save.configure(text="✅ INJECTION RÉUSSIE", fg_color="green")
+            message = "✅ MODIFIÉ" if self.jeu_en_edition else "✅ INJECTION RÉUSSIE"
+            self.btn_save.configure(text=message, fg_color="green")
             self.after(2000, lambda: self.btn_save.configure(text="VALIDER L'INJECTION", fg_color=MAGENTA))
+
+            self.annuler_edition()
             self.mettre_a_jour_compteur()
+            self.rafraichir_liste_communaute(self.ent_recherche.get())
 
         except PermissionError:
             self.textbox.insert("end", "[!] ERREUR : Fermez le fichier bugs_data.json pour enregistrer.\n")
+
+    def exporter_base(self):
+        """Sauvegarde une copie de la base courante dans un fichier choisi par l'utilisateur,
+        pour pouvoir la partager (mail, Discord, clé USB...)."""
+        chemin = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("Fichier JSON", "*.json")],
+            initialfile="bugs_data_export.json",
+            title="Exporter la base de bugs",
+        )
+        if not chemin:
+            return  # L'utilisateur a annulé
+
+        data = self.charger_base_de_donnees()
+        with open(chemin, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+
+        messagebox.showinfo("Export réussi", f"{len(data)} jeu(x) exporté(s) vers :\n{chemin}")
+
+    def importer_base(self):
+        """Fusionne une base externe (reçue d'un autre utilisateur) dans la base locale."""
+        chemin = filedialog.askopenfilename(
+            filetypes=[("Fichier JSON", "*.json")],
+            title="Importer une base de bugs",
+        )
+        if not chemin:
+            return
+
+        try:
+            with open(chemin, "r", encoding="utf-8") as f:
+                base_externe = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            messagebox.showerror("Erreur", "Ce fichier n'est pas une base de bugs valide.")
+            return
+
+        if not isinstance(base_externe, dict) or not base_externe:
+            messagebox.showerror("Erreur", "Ce fichier ne contient aucune entrée valide.")
+            return
+
+        self._fusionner_base_externe(base_externe, source="le fichier importé")
+
+    def synchroniser_github(self):
+        """Récupère la base communautaire publiée sur GitHub et la fusionne avec la base locale."""
+        if "TON-PSEUDO-GITHUB" in URL_GITHUB_RAW:
+            messagebox.showwarning(
+                "Configuration requise",
+                "Renseigne d'abord l'URL de ton dépôt dans URL_GITHUB_RAW, en haut de main.py "
+                "(sur GitHub : ouvre bugs_data.json > bouton \"Raw\" > copie l'URL).",
+            )
+            return
+
+        try:
+            reponse = requests.get(URL_GITHUB_RAW, timeout=10)
+            reponse.raise_for_status()
+            base_distante = reponse.json()
+        except requests.RequestException:
+            messagebox.showerror("Erreur réseau", "Impossible de contacter GitHub. Vérifie ta connexion.")
+            return
+        except ValueError:
+            messagebox.showerror("Erreur", "Le fichier distant n'est pas un JSON valide.")
+            return
+
+        if not isinstance(base_distante, dict) or not base_distante:
+            messagebox.showinfo("Synchronisation", "Aucune entrée trouvée sur le dépôt distant.")
+            return
+
+        self._fusionner_base_externe(base_distante, source="GitHub")
+
+    def _fusionner_base_externe(self, base_externe, source="la source externe"):
+        """Logique de fusion commune à l'import fichier et à la synchro GitHub."""
+        data = self.charger_base_de_donnees()
+        nouveaux = [nom for nom in base_externe if nom not in data]
+        conflits = [nom for nom in base_externe if nom in data]
+
+        reponse = messagebox.askyesnocancel(
+            "Synchroniser la base",
+            f"{len(nouveaux)} nouveau(x) jeu(x) depuis {source}.\n"
+            f"{len(conflits)} jeu(x) déjà présent(s) dans ta base.\n\n"
+            "Oui = écraser tes entrées en conflit avec celles reçues\n"
+            "Non = garder tes entrées, ajouter seulement les nouveaux jeux\n"
+            "Annuler = ne rien faire",
+        )
+
+        if reponse is None:
+            return
+
+        for nom, infos in base_externe.items():
+            if nom in data and reponse is False:
+                continue
+            data[nom] = infos
+
+        with open(CHEMIN_DB, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+
+        self.mettre_a_jour_compteur()
+        self.rafraichir_liste_communaute(self.ent_recherche.get())
+        messagebox.showinfo("Terminé", "La base a été mise à jour.")
+
+    def charger_jeu_pour_edition(self, nom):
+        """Pré-remplit le formulaire avec une entrée existante pour la modifier."""
+        data = self.charger_base_de_donnees()
+        infos = data.get(nom)
+        if not infos:
+            return
+
+        self.jeu_en_edition = nom
+
+        self.ent_jeu.delete(0, "end")
+        self.ent_jeu.insert(0, nom)
+
+        self.ent_id.delete(0, "end")
+        self.ent_id.insert(0, infos.get("id", ""))
+
+        self.ent_bug.delete(0, "end")
+        self.ent_bug.insert(0, infos.get("bug", ""))
+
+        self.txt_sol.delete("0.0", "end")
+        self.txt_sol.insert("0.0", infos.get("solution") or PLACEHOLDER_SOLUTION)
+
+        self.btn_save.configure(text="METTRE À JOUR")
+        self.btn_annuler.pack(side="left", padx=5)
+
+    def annuler_edition(self):
+        """Quitte le mode édition et vide le formulaire."""
+        self.jeu_en_edition = None
+
+        self.ent_jeu.delete(0, "end")
+        self.ent_id.delete(0, "end")
+        self.ent_bug.delete(0, "end")
+        self.txt_sol.delete("0.0", "end")
+        self.txt_sol.insert("0.0", PLACEHOLDER_SOLUTION)
+
+        self.btn_save.configure(text="VALIDER L'INJECTION")
+        self.btn_annuler.pack_forget()
+
+    def supprimer_jeu(self, nom):
+        """Retire définitivement une entrée de la base."""
+        data = self.charger_base_de_donnees()
+        data.pop(nom, None)
+
+        with open(CHEMIN_DB, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+
+        if self.jeu_en_edition == nom:
+            self.annuler_edition()
+
+        self.mettre_a_jour_compteur()
+        self.rafraichir_liste_communaute(self.ent_recherche.get())
+
+    def rafraichir_liste_communaute(self, filtre=""):
+        """Affiche la liste des jeux de la base, filtrée par la recherche, avec actions par ligne."""
+        for child in self.scrollable_frame_commu.winfo_children():
+            child.destroy()
+
+        data = self.charger_base_de_donnees()
+        filtre = filtre.lower().strip()
+
+        for nom in sorted(data.keys(), key=str.lower):
+            if filtre and filtre not in nom.lower():
+                continue
+
+            ligne = ctk.CTkFrame(self.scrollable_frame_commu, fg_color="gray20")
+            ligne.pack(pady=4, padx=5, fill="x")
+
+            ctk.CTkLabel(ligne, text=nom, font=("Consolas", 11)).pack(side="left", padx=10, pady=6)
+
+            ctk.CTkButton(ligne, text="🗑️", width=36, fg_color="#661111", hover_color="#8a1c1c",
+                         command=lambda n=nom: self.supprimer_jeu(n)).pack(side="right", padx=(5, 10))
+            ctk.CTkButton(ligne, text="✏️", width=36, fg_color="#301050", hover_color="#472170",
+                         command=lambda n=nom: self.charger_jeu_pour_edition(n)).pack(side="right", padx=5)
 
     # ---------------------------------------------------------------
     # DIVERS
     # ---------------------------------------------------------------
 
     def charger_base_de_donnees(self):
-        if os.path.exists("bugs_data.json"):
-            with open("bugs_data.json", "r", encoding="utf-8") as f:
+        if os.path.exists(CHEMIN_DB):
+            with open(CHEMIN_DB, "r", encoding="utf-8") as f:
                 return json.load(f)
         return {}
 
