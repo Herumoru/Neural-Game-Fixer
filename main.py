@@ -11,6 +11,7 @@ import shutil
 import ctypes
 import datetime
 from tkinter import filedialog, messagebox
+from PIL import Image, ImageDraw
 
 try:
     import winreg  # Disponible uniquement sur Windows
@@ -31,6 +32,161 @@ GREEN = "#39ff14"
 FONT_TITRE_APP = ("Bahnschrift SemiBold", 20, "bold")
 FONT_SOUS_TITRE = ("Bahnschrift", 11)
 FONT_SECTION = ("Bahnschrift SemiBold", 16, "bold")
+
+# ---------------------------------------------------------------
+# ICÔNES VECTORIELLES (dessinées en code, aucun fichier externe à gérer)
+# Un seul style de trait, cohérent, plutôt que des emojis qui rendent
+# différemment selon la machine.
+# ---------------------------------------------------------------
+
+def _icone_recherche(d, c, e):
+    d.ellipse([15, 15, 60, 60], outline=c, width=e)
+    d.line([56, 56, 88, 88], fill=c, width=e)
+
+
+def _icone_communaute(d, c, e):
+    d.ellipse([12, 18, 38, 44], outline=c, width=e)
+    d.ellipse([62, 18, 88, 44], outline=c, width=e)
+    d.arc([2, 48, 48, 96], start=195, end=345, fill=c, width=e)
+    d.arc([52, 48, 98, 96], start=195, end=345, fill=c, width=e)
+
+
+def _icone_diagnostic(d, c, e):
+    d.line([5, 58, 28, 58, 40, 15, 58, 92, 68, 58, 95, 58], fill=c, width=e, joint="curve")
+
+
+def _icone_eclair(d, c, e):
+    pts = [(56, 8), (26, 56), (46, 56), (38, 92), (74, 40), (52, 40), (62, 8)]
+    d.polygon(pts, outline=c, width=e)
+
+
+def _icone_manette(d, c, e):
+    d.rounded_rectangle([8, 32, 92, 76], radius=22, outline=c, width=e)
+    d.line([18, 54, 36, 54], fill=c, width=e)
+    d.line([27, 45, 27, 63], fill=c, width=e)
+    d.ellipse([58, 40, 70, 52], outline=c, width=e)
+    d.ellipse([72, 54, 84, 66], outline=c, width=e)
+
+
+def _icone_cle(d, c, e):
+    d.ellipse([8, 8, 38, 38], outline=c, width=e)
+    d.line([30, 30, 78, 78], fill=c, width=e)
+    d.line([66, 66, 80, 52], fill=c, width=e)
+    d.line([74, 74, 88, 60], fill=c, width=e)
+
+
+def _icone_fusee(d, c, e):
+    d.polygon([(50, 6), (32, 56), (68, 56)], outline=c, width=e)
+    d.rectangle([32, 56, 68, 78], outline=c, width=e)
+    d.polygon([(32, 78), (20, 96), (32, 88)], outline=c, width=e)
+    d.polygon([(68, 78), (80, 96), (68, 88)], outline=c, width=e)
+
+
+def _icone_info(d, c, e):
+    d.ellipse([8, 8, 92, 92], outline=c, width=e)
+    d.ellipse([45, 26, 55, 36], fill=c)
+    d.line([50, 46, 50, 74], fill=c, width=e)
+
+
+def _icone_disque(d, c, e):
+    d.rounded_rectangle([8, 18, 92, 82], radius=8, outline=c, width=e)
+    d.rectangle([28, 18, 72, 34], outline=c, width=e)
+    d.ellipse([42, 54, 58, 70], outline=c, width=e)
+
+
+def _icone_puce(d, c, e):
+    d.rectangle([26, 26, 74, 74], outline=c, width=e)
+    for pos in (37, 50, 63):
+        d.line([pos, 26, pos, 8], fill=c, width=e)
+        d.line([pos, 74, pos, 92], fill=c, width=e)
+        d.line([26, pos, 8, pos], fill=c, width=e)
+        d.line([74, pos, 92, pos], fill=c, width=e)
+
+
+def _icone_moniteur(d, c, e):
+    d.rounded_rectangle([8, 12, 92, 66], radius=6, outline=c, width=e)
+    d.line([50, 66, 50, 82], fill=c, width=e)
+    d.line([28, 90, 72, 90], fill=c, width=e)
+
+
+def _icone_poubelle(d, c, e):
+    d.line([18, 28, 82, 28], fill=c, width=e)
+    d.polygon([(28, 28), (72, 28), (66, 92), (34, 92)], outline=c, width=e)
+    d.line([40, 12, 60, 12], fill=c, width=e)
+    d.line([40, 12, 40, 28], fill=c, width=e)
+    d.line([60, 12, 60, 28], fill=c, width=e)
+
+
+def _icone_crayon(d, c, e):
+    d.polygon([(12, 88), (18, 66), (68, 16), (84, 32), (34, 82)], outline=c, width=e)
+    d.line([18, 66, 34, 82], fill=c, width=e)
+
+
+def _icone_upload(d, c, e):
+    d.line([50, 82, 50, 18], fill=c, width=e)
+    d.line([24, 44, 50, 18], fill=c, width=e)
+    d.line([76, 44, 50, 18], fill=c, width=e)
+    d.line([18, 90, 82, 90], fill=c, width=e)
+
+
+def _icone_download(d, c, e):
+    d.line([50, 18, 50, 82], fill=c, width=e)
+    d.line([24, 56, 50, 82], fill=c, width=e)
+    d.line([76, 56, 50, 82], fill=c, width=e)
+    d.line([18, 90, 82, 90], fill=c, width=e)
+
+
+def _icone_sync(d, c, e):
+    d.arc([12, 12, 88, 88], start=25, end=300, fill=c, width=e)
+    d.polygon([(84, 10), (84, 32), (62, 22)], fill=c)
+
+
+def _icone_croix(d, c, e):
+    d.line([22, 22, 78, 78], fill=c, width=e)
+    d.line([78, 22, 22, 78], fill=c, width=e)
+
+
+_DESSINS_ICONES = {
+    "recherche": _icone_recherche,
+    "communaute": _icone_communaute,
+    "diagnostic": _icone_diagnostic,
+    "eclair": _icone_eclair,
+    "manette": _icone_manette,
+    "cle": _icone_cle,
+    "fusee": _icone_fusee,
+    "info": _icone_info,
+    "disque": _icone_disque,
+    "puce": _icone_puce,
+    "moniteur": _icone_moniteur,
+    "poubelle": _icone_poubelle,
+    "crayon": _icone_crayon,
+    "upload": _icone_upload,
+    "download": _icone_download,
+    "sync": _icone_sync,
+    "croix": _icone_croix,
+}
+
+_CACHE_ICONES = {}
+
+
+def obtenir_icone(nom, couleur=CYAN, taille=20, epaisseur=7):
+    """Dessine (et met en cache) une icône vectorielle prête à l'emploi dans un
+    CTkButton/CTkLabel via le paramètre image=. Aucun fichier externe requis."""
+    cle = (nom, couleur, taille)
+    if cle not in _CACHE_ICONES:
+        img = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+        _DESSINS_ICONES[nom](ImageDraw.Draw(img), couleur, epaisseur)
+        _CACHE_ICONES[cle] = ctk.CTkImage(light_image=img, dark_image=img, size=(taille, taille))
+    return _CACHE_ICONES[cle]
+
+
+def titre_section(parent, nom_icone, texte, couleur=CYAN, taille_icone=22):
+    """Frame titre avec icône + texte, à la place des décorations façon emoji/tirets."""
+    cadre = ctk.CTkFrame(parent, fg_color="transparent")
+    ctk.CTkLabel(cadre, text="", image=obtenir_icone(nom_icone, couleur, taille_icone)).pack(side="left", padx=(0, 8))
+    ctk.CTkLabel(cadre, text=texte, font=FONT_SECTION, text_color=couleur).pack(side="left")
+    return cadre
+
 
 PLACEHOLDER_SOLUTION = "ÉCRIVEZ LA SOLUTION ICI..."
 
@@ -67,7 +223,7 @@ class GameFixerApp(ctk.CTk):
         super().__init__()
 
         # Fenêtre principale
-        self.title("⚡ NEURAL GAME FIXER ⚡")
+        self.title("NEURAL GAME FIXER")
         self.geometry("750x820")
         self.configure(fg_color=DARK_BG)
 
@@ -89,8 +245,11 @@ class GameFixerApp(ctk.CTk):
 
         bloc_titre = ctk.CTkFrame(entete, fg_color="transparent")
         bloc_titre.pack(side="left", padx=20, pady=8)
-        ctk.CTkLabel(bloc_titre, text="⚡ NEURAL GAME FIXER", font=FONT_TITRE_APP,
-                    text_color=CYAN).pack(anchor="w")
+        ligne_titre = ctk.CTkFrame(bloc_titre, fg_color="transparent")
+        ligne_titre.pack(anchor="w")
+        ctk.CTkLabel(ligne_titre, text="", image=obtenir_icone("eclair", CYAN, 22)).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(ligne_titre, text="NEURAL GAME FIXER", font=FONT_TITRE_APP,
+                    text_color=CYAN).pack(side="left")
         ctk.CTkLabel(bloc_titre, text="Détection & réparation · Steam · Epic · Battle.net",
                     font=FONT_SOUS_TITRE, text_color="#8a8aa0").pack(anchor="w")
 
@@ -108,9 +267,9 @@ class GameFixerApp(ctk.CTk):
                                    border_color="#1e054d")
         self.tabs.pack(padx=20, pady=10)
 
-        self.tab_scan = self.tabs.add("🔍 Scanner")
-        self.tab_commu = self.tabs.add("🤝 Communauté")
-        self.tab_diag = self.tabs.add("🩺 Diagnostic")
+        self.tab_scan = self.tabs.add("Scanner")
+        self.tab_commu = self.tabs.add("Communauté")
+        self.tab_diag = self.tabs.add("Diagnostic")
 
         # 2. Barre d'état flottante
         self.status_frame = ctk.CTkFrame(self, height=25, fg_color="transparent")
@@ -141,19 +300,22 @@ class GameFixerApp(ctk.CTk):
 
     def setup_scan_tab(self):
         """Onglet pour scanner et réparer"""
-        ctk.CTkLabel(self.tab_scan, text="⚡ SYSTEM SCANNER ⚡", font=FONT_SECTION, text_color=CYAN).pack(pady=15)
+        titre_section(self.tab_scan, "eclair", "SYSTEM SCANNER", CYAN).pack(pady=15)
 
         boutons_frame = ctk.CTkFrame(self.tab_scan, fg_color="transparent")
         boutons_frame.pack(pady=5)
 
         self.btn_scan = ctk.CTkButton(boutons_frame, text="LANCER L'ANALYSE", border_color=CYAN, border_width=2,
                                       fg_color="transparent", text_color=CYAN, hover_color="#062226",
+                                      image=obtenir_icone("eclair", CYAN, 16), compound="left",
                                       command=self.analyser_systeme)
         self.btn_scan.pack(side="left", padx=5)
 
-        self.btn_auto_detect = ctk.CTkButton(boutons_frame, text="🔍 DÉTECTION RAPIDE", border_color=CYAN,
+        self.btn_auto_detect = ctk.CTkButton(boutons_frame, text="DÉTECTION RAPIDE", border_color=CYAN,
                                              border_width=2, fg_color="transparent", text_color=CYAN,
-                                             hover_color="#062226", command=self.lancer_auto_detection)
+                                             hover_color="#062226",
+                                             image=obtenir_icone("recherche", CYAN, 16), compound="left",
+                                             command=self.lancer_auto_detection)
         self.btn_auto_detect.pack(side="left", padx=5)
 
         self.progress_bar = ctk.CTkProgressBar(self.tab_scan, width=400, progress_color=CYAN, fg_color="#002226")
@@ -229,12 +391,13 @@ class GameFixerApp(ctk.CTk):
 
             entete = ctk.CTkFrame(ligne, fg_color="transparent")
             entete.pack(fill="x")
-            ctk.CTkLabel(entete, text=f"🎮 {nom[:30]}", font=("Consolas", 12, "bold")).pack(side="left", padx=10, pady=5)
+            ctk.CTkLabel(entete, text="", image=obtenir_icone("manette", "#aaaaaa", 16)).pack(side="left", padx=(10, 4), pady=5)
+            ctk.CTkLabel(entete, text=nom[:30], font=("Consolas", 12, "bold")).pack(side="left")
             ctk.CTkLabel(entete, text=plateforme.upper(), font=("Consolas", 9, "bold"),
                         text_color="#888888").pack(side="left", padx=5)
 
             if infos:
-                ctk.CTkLabel(entete, text="⚠ BUG CONNU", font=("Consolas", 10, "bold"), text_color=MAGENTA).pack(side="right", padx=10)
+                ctk.CTkLabel(entete, text="BUG CONNU", font=("Consolas", 10, "bold"), text_color=MAGENTA).pack(side="right", padx=10)
                 ctk.CTkLabel(ligne, text=f"Symptôme : {infos.get('bug', 'N/A')}", font=("Consolas", 10),
                             text_color="#aaaaaa", wraplength=500, justify="left").pack(anchor="w", padx=15)
                 ctk.CTkLabel(ligne, text=f"Solution : {infos.get('solution', 'N/A')}", font=("Consolas", 10),
@@ -246,21 +409,23 @@ class GameFixerApp(ctk.CTk):
             boutons_action.pack(pady=(0, 8))
 
             if plateforme == "Steam" and appid:
-                ctk.CTkButton(boutons_action, text="🔧 VÉRIFIER LES FICHIERS", width=190, fg_color=MAGENTA,
-                             hover_color="#cc00cc",
+                ctk.CTkButton(boutons_action, text="VÉRIFIER LES FICHIERS", width=190, fg_color=MAGENTA,
+                             hover_color="#cc00cc", image=obtenir_icone("cle", "white", 16), compound="left",
                              command=lambda i=appid, n=nom: self.reparer_jeu_specifique(i, n)).pack(side="left", padx=3)
             elif plateforme == "Epic":
-                ctk.CTkButton(boutons_action, text="🚀 OUVRIR EPIC LAUNCHER", width=190, fg_color=MAGENTA,
-                             hover_color="#cc00cc",
+                ctk.CTkButton(boutons_action, text="OUVRIR EPIC LAUNCHER", width=190, fg_color=MAGENTA,
+                             hover_color="#cc00cc", image=obtenir_icone("fusee", "white", 16), compound="left",
                              command=lambda n=nom: self.ouvrir_epic_launcher(n)).pack(side="left", padx=3)
             else:
-                ctk.CTkButton(boutons_action, text="ℹ️ COMMENT RÉPARER", width=190, fg_color="#444444",
-                             hover_color="#5a5a5a",
+                ctk.CTkButton(boutons_action, text="COMMENT RÉPARER", width=190, fg_color="#444444",
+                             hover_color="#5a5a5a", image=obtenir_icone("info", "white", 16), compound="left",
                              command=lambda n=nom: self.afficher_instructions_manuelles(n)).pack(side="left", padx=3)
 
-            ctk.CTkButton(boutons_action, text="🩺 ANALYSER LES CRASHS", width=190, fg_color="#1a1a3d",
+            ctk.CTkButton(boutons_action, text="ANALYSER LES CRASHS", width=190, fg_color="#1a1a3d",
                          border_color=CYAN, border_width=1, hover_color="#26264d",
+                         image=obtenir_icone("diagnostic", CYAN, 16), compound="left",
                          command=lambda n=nom: self.analyser_crashs_jeu(n)).pack(side="left", padx=3)
+
 
     # ---------------------------------------------------------------
     # DÉTECTION STEAM (logique unifiée, avant dupliquée à deux endroits)
@@ -348,14 +513,15 @@ class GameFixerApp(ctk.CTk):
 
         return sorted(disques, key=str.lower)
 
-    def ajouter_ligne_diagnostic(self, titre, statut, detail, couleur):
+    def ajouter_ligne_diagnostic(self, nom_icone, titre, statut, detail, couleur):
         """Affiche une ligne de résultat colorée (vert=OK, orange=attention, rouge=critique)."""
         ligne = ctk.CTkFrame(self.frame_diagnostic, fg_color="gray20")
         ligne.pack(pady=4, padx=5, fill="x")
 
         entete = ctk.CTkFrame(ligne, fg_color="transparent")
         entete.pack(fill="x")
-        ctk.CTkLabel(entete, text=titre, font=("Consolas", 12, "bold")).pack(side="left", padx=10, pady=6)
+        ctk.CTkLabel(entete, text="", image=obtenir_icone(nom_icone, "#aaaaaa", 18)).pack(side="left", padx=(10, 6), pady=6)
+        ctk.CTkLabel(entete, text=titre, font=("Consolas", 12, "bold")).pack(side="left")
         ctk.CTkLabel(entete, text=statut, font=("Consolas", 10, "bold"), text_color=couleur).pack(side="right", padx=10)
 
         if detail:
@@ -380,7 +546,7 @@ class GameFixerApp(ctk.CTk):
             else:
                 statut, couleur = "OK", GREEN
             self.ajouter_ligne_diagnostic(
-                f"💾 Disque {disque}", statut, f"{libre} Go libres sur {total} Go", couleur,
+                "disque", f"Disque {disque}", statut, f"{libre} Go libres sur {total} Go", couleur,
             )
 
         # --- RAM ---
@@ -392,19 +558,19 @@ class GameFixerApp(ctk.CTk):
             else:
                 statut, couleur = "OK", GREEN
                 detail = f"{total_ram} Go au total, {libre_ram} Go libres actuellement"
-            self.ajouter_ligne_diagnostic("🧠 Mémoire RAM", statut, detail, couleur)
+            self.ajouter_ligne_diagnostic("puce", "Mémoire RAM", statut, detail, couleur)
         else:
-            self.ajouter_ligne_diagnostic("🧠 Mémoire RAM", "N/A", "Impossible de lire la RAM sur ce système", "#666666")
+            self.ajouter_ligne_diagnostic("puce", "Mémoire RAM", "N/A", "Impossible de lire la RAM sur ce système", "#666666")
 
         # --- GPU / pilote ---
         cartes = self.obtenir_info_gpu()
         if not cartes:
-            self.ajouter_ligne_diagnostic("🖥 Carte graphique", "N/A",
+            self.ajouter_ligne_diagnostic("moniteur", "Carte graphique", "N/A",
                                           "Impossible de lire les infos GPU (nécessite PowerShell)", "#666666")
         else:
             for nom, date_pilote in cartes:
                 if date_pilote is None:
-                    self.ajouter_ligne_diagnostic(f"🖥 {nom}", "N/A", "Date du pilote inconnue", "#666666")
+                    self.ajouter_ligne_diagnostic("moniteur", nom, "N/A", "Date du pilote inconnue", "#666666")
                     continue
                 age_jours = (datetime.datetime.now() - date_pilote).days
                 if age_jours > 365:
@@ -412,7 +578,7 @@ class GameFixerApp(ctk.CTk):
                 else:
                     statut, couleur = "OK", GREEN
                 self.ajouter_ligne_diagnostic(
-                    f"🖥 {nom}", statut,
+                    "moniteur", nom, statut,
                     f"Pilote du {date_pilote.strftime('%d/%m/%Y')} ({age_jours} jours) — "
                     "un pilote très ancien est une cause fréquente de plantages/bugs graphiques",
                     couleur,
@@ -420,13 +586,14 @@ class GameFixerApp(ctk.CTk):
 
     def setup_diagnostic_tab(self):
         """Onglet de diagnostic système général (indépendant d'un jeu précis)."""
-        ctk.CTkLabel(self.tab_diag, text="🩺 DIAGNOSTIC SYSTÈME", font=FONT_SECTION, text_color=CYAN).pack(pady=15)
+        titre_section(self.tab_diag, "diagnostic", "DIAGNOSTIC SYSTÈME", CYAN).pack(pady=15)
         ctk.CTkLabel(self.tab_diag,
                     text="Vérifie les causes les plus fréquentes de plantages/bugs, tous jeux confondus.",
                     font=FONT_SOUS_TITRE, text_color="#8a8aa0", wraplength=550).pack(pady=(0, 10))
 
         ctk.CTkButton(self.tab_diag, text="LANCER LE DIAGNOSTIC", border_color=CYAN, border_width=2,
                      fg_color="transparent", text_color=CYAN, hover_color="#062226",
+                     image=obtenir_icone("diagnostic", CYAN, 16), compound="left",
                      command=self.lancer_diagnostic_systeme).pack(pady=5)
 
         self.frame_diagnostic = ctk.CTkScrollableFrame(
@@ -711,8 +878,7 @@ class GameFixerApp(ctk.CTk):
 
     def setup_community_tab(self):
         """Interface de contribution + gestion (modifier/supprimer) de la base"""
-        ctk.CTkLabel(self.tab_commu, text="--- AJOUTER / MODIFIER UN JEU ---",
-                    font=FONT_SECTION, text_color=MAGENTA).pack(pady=(12, 8))
+        titre_section(self.tab_commu, "crayon", "AJOUTER / MODIFIER UN JEU", MAGENTA).pack(pady=(12, 8))
 
         style_champ = {"width": 400, "height": 36, "fg_color": "black", "border_color": "#301050"}
 
@@ -740,31 +906,37 @@ class GameFixerApp(ctk.CTk):
                                       fg_color="transparent", border_color=MAGENTA, border_width=2,
                                       text_color=MAGENTA, hover_color="#2e002e",
                                       font=("Consolas", 14, "bold"),
+                                      image=obtenir_icone("crayon", MAGENTA, 16), compound="left",
                                       command=self.ajouter_bug_commu)
         self.btn_save.pack(side="left", padx=5)
 
-        self.btn_annuler = ctk.CTkButton(boutons_form, text="✖ ANNULER", fg_color="#444444",
-                                         hover_color="#5a5a5a", command=self.annuler_edition)
+        self.btn_annuler = ctk.CTkButton(boutons_form, text="ANNULER", fg_color="#444444",
+                                         hover_color="#5a5a5a",
+                                         image=obtenir_icone("croix", "white", 14), compound="left",
+                                         command=self.annuler_edition)
         # Caché tant qu'on n'édite pas une entrée existante
 
         # --- Partage manuel de la base (export/import JSON) ---
         boutons_partage = ctk.CTkFrame(self.tab_commu, fg_color="transparent")
         boutons_partage.pack(pady=(0, 8))
 
-        ctk.CTkButton(boutons_partage, text="📤 EXPORTER LA BASE", fg_color="transparent",
+        ctk.CTkButton(boutons_partage, text="EXPORTER LA BASE", fg_color="transparent",
                      border_color=CYAN, border_width=2, text_color=CYAN, hover_color="#062226",
+                     image=obtenir_icone("upload", CYAN, 16), compound="left",
                      command=self.exporter_base).pack(side="left", padx=5)
 
-        ctk.CTkButton(boutons_partage, text="📥 IMPORTER UNE BASE", fg_color="transparent",
+        ctk.CTkButton(boutons_partage, text="IMPORTER UNE BASE", fg_color="transparent",
                      border_color=CYAN, border_width=2, text_color=CYAN, hover_color="#062226",
+                     image=obtenir_icone("download", CYAN, 16), compound="left",
                      command=self.importer_base).pack(side="left", padx=5)
 
-        ctk.CTkButton(boutons_partage, text="🔄 SYNC GITHUB", fg_color="transparent",
+        ctk.CTkButton(boutons_partage, text="SYNC GITHUB", fg_color="transparent",
                      border_color=MAGENTA, border_width=2, text_color=MAGENTA, hover_color="#2e002e",
+                     image=obtenir_icone("sync", MAGENTA, 16), compound="left",
                      command=self.synchroniser_github).pack(side="left", padx=5)
 
         # --- Recherche + liste de la base actuelle ---
-        self.ent_recherche = ctk.CTkEntry(self.tab_commu, placeholder_text="🔎 Rechercher un jeu dans la base...",
+        self.ent_recherche = ctk.CTkEntry(self.tab_commu, placeholder_text="Rechercher un jeu dans la base...",
                                           width=400, height=32, fg_color="black", border_color=CYAN)
         self.ent_recherche.pack(pady=(10, 6))
         self.ent_recherche.bind("<KeyRelease>", lambda e: self.rafraichir_liste_communaute(self.ent_recherche.get()))
@@ -990,9 +1162,11 @@ class GameFixerApp(ctk.CTk):
 
             ctk.CTkLabel(ligne, text=nom, font=("Consolas", 11)).pack(side="left", padx=10, pady=6)
 
-            ctk.CTkButton(ligne, text="🗑️", width=36, fg_color="#661111", hover_color="#8a1c1c",
+            ctk.CTkButton(ligne, text="", width=36, fg_color="#661111", hover_color="#8a1c1c",
+                         image=obtenir_icone("poubelle", "white", 15),
                          command=lambda n=nom: self.supprimer_jeu(n)).pack(side="right", padx=(5, 10))
-            ctk.CTkButton(ligne, text="✏️", width=36, fg_color="#301050", hover_color="#472170",
+            ctk.CTkButton(ligne, text="", width=36, fg_color="#301050", hover_color="#472170",
+                         image=obtenir_icone("crayon", "white", 15),
                          command=lambda n=nom: self.charger_jeu_pour_edition(n)).pack(side="right", padx=5)
 
     # ---------------------------------------------------------------
