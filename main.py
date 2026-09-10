@@ -330,12 +330,23 @@ class GameFixerApp(ctk.CTk):
         return cartes
 
     def lister_disques_a_verifier(self):
-        """Le disque système + tous ceux qui hébergent une bibliothèque Steam détectée."""
-        disques = {os.environ.get("SystemDrive", "C:") + "\\"}
+        """Le disque système + tous ceux qui hébergent une bibliothèque Steam détectée.
+        FIX : dédoublonne en ignorant la casse — Windows ne fait pas la différence entre
+        "C:\\" et "c:\\", mais une simple comparaison de texte si."""
+        disques = []
+        cles_vues = set()
+
+        def ajouter(disque):
+            cle = os.path.normcase(disque)
+            if cle not in cles_vues:
+                cles_vues.add(cle)
+                disques.append(disque)
+
+        ajouter(os.environ.get("SystemDrive", "C:") + "\\")
         for dossier in self.trouver_dossiers_steamapps():
-            lecteur = os.path.splitdrive(dossier)[0] + "\\"
-            disques.add(lecteur)
-        return sorted(disques)
+            ajouter(os.path.splitdrive(dossier)[0] + "\\")
+
+        return sorted(disques, key=str.lower)
 
     def ajouter_ligne_diagnostic(self, titre, statut, detail, couleur):
         """Affiche une ligne de résultat colorée (vert=OK, orange=attention, rouge=critique)."""
