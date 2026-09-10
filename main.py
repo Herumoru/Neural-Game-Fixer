@@ -19,6 +19,12 @@ MAGENTA = "#ff00ff"
 DARK_BG = "#0d0221"
 GREEN = "#39ff14"
 
+# Polices : Bahnschrift (fournie avec Windows) pour les titres/l'interface,
+# Consolas (monospace) pour tout ce qui doit "avoir l'air d'un terminal"
+FONT_TITRE_APP = ("Bahnschrift SemiBold", 20, "bold")
+FONT_SOUS_TITRE = ("Bahnschrift", 11)
+FONT_SECTION = ("Bahnschrift SemiBold", 16, "bold")
+
 PLACEHOLDER_SOLUTION = "ÉCRIVEZ LA SOLUTION ICI..."
 
 # ⚠️ À CONFIGURER : remplace par l'URL "raw" de ton bugs_data.json sur GitHub
@@ -36,7 +42,17 @@ def chemin_base_donnees():
     return os.path.join(base_dir, "bugs_data.json")
 
 
+def chemin_icone():
+    """Même logique que chemin_base_donnees(), pour trouver icon.ico à côté du script/exe."""
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, "icon.ico")
+
+
 CHEMIN_DB = chemin_base_donnees()
+CHEMIN_ICONE = chemin_icone()
 
 
 class GameFixerApp(ctk.CTk):
@@ -45,8 +61,13 @@ class GameFixerApp(ctk.CTk):
 
         # Fenêtre principale
         self.title("⚡ NEURAL GAME FIXER ⚡")
-        self.geometry("750x750")
+        self.geometry("750x820")
         self.configure(fg_color=DARK_BG)
+
+        try:
+            self.iconbitmap(CHEMIN_ICONE)
+        except Exception:
+            pass  # Pas bloquant si l'icône est absente (ex: premier lancement sans le fichier)
 
         # FIX : évite un AttributeError si "Réparer" est cliqué avant tout scan
         self.jeu_detecte_actuel = None
@@ -54,10 +75,24 @@ class GameFixerApp(ctk.CTk):
         # Nom du jeu actuellement en cours de modification (None = mode ajout)
         self.jeu_en_edition = None
 
+        # 0. Bandeau d'en-tête
+        entete = ctk.CTkFrame(self, fg_color="#100228", corner_radius=0, height=64)
+        entete.pack(fill="x", side="top")
+        entete.pack_propagate(False)
+
+        bloc_titre = ctk.CTkFrame(entete, fg_color="transparent")
+        bloc_titre.pack(side="left", padx=20, pady=8)
+        ctk.CTkLabel(bloc_titre, text="⚡ NEURAL GAME FIXER", font=FONT_TITRE_APP,
+                    text_color=CYAN).pack(anchor="w")
+        ctk.CTkLabel(bloc_titre, text="Détection & réparation · Steam · Epic · Battle.net",
+                    font=FONT_SOUS_TITRE, text_color="#8a8aa0").pack(anchor="w")
+
+        ctk.CTkFrame(self, fg_color=MAGENTA, height=2, corner_radius=0).pack(fill="x", side="top")
+
         # 1. Configuration des onglets
         self.tabs = ctk.CTkTabview(self,
                                    width=700,
-                                   height=640,
+                                   height=680,
                                    fg_color="#100228",
                                    segmented_button_fg_color="#0d0221",
                                    segmented_button_selected_color=CYAN,
@@ -97,18 +132,19 @@ class GameFixerApp(ctk.CTk):
 
     def setup_scan_tab(self):
         """Onglet pour scanner et réparer"""
-        ctk.CTkLabel(self.tab_scan, text="⚡ SYSTEM SCANNER ⚡", font=("Consolas", 24, "bold"), text_color=CYAN).pack(pady=15)
+        ctk.CTkLabel(self.tab_scan, text="⚡ SYSTEM SCANNER ⚡", font=FONT_SECTION, text_color=CYAN).pack(pady=15)
 
         boutons_frame = ctk.CTkFrame(self.tab_scan, fg_color="transparent")
         boutons_frame.pack(pady=5)
 
         self.btn_scan = ctk.CTkButton(boutons_frame, text="LANCER L'ANALYSE", border_color=CYAN, border_width=2,
-                                      fg_color="transparent", text_color=CYAN, command=self.analyser_systeme)
+                                      fg_color="transparent", text_color=CYAN, hover_color="#062226",
+                                      command=self.analyser_systeme)
         self.btn_scan.pack(side="left", padx=5)
 
         self.btn_auto_detect = ctk.CTkButton(boutons_frame, text="🔍 DÉTECTION RAPIDE", border_color=CYAN,
                                              border_width=2, fg_color="transparent", text_color=CYAN,
-                                             command=self.lancer_auto_detection)
+                                             hover_color="#062226", command=self.lancer_auto_detection)
         self.btn_auto_detect.pack(side="left", padx=5)
 
         self.progress_bar = ctk.CTkProgressBar(self.tab_scan, width=400, progress_color=CYAN, fg_color="#002226")
@@ -124,6 +160,7 @@ class GameFixerApp(ctk.CTk):
             label_text="⚡ JEUX DÉTECTÉS",
             label_font=("Consolas", 13, "bold"),
             label_text_color=CYAN,
+            label_fg_color="#0a0b10",
             fg_color="#0a0b10",
             corner_radius=10,
             border_width=1,
@@ -198,12 +235,15 @@ class GameFixerApp(ctk.CTk):
 
             if plateforme == "Steam" and appid:
                 ctk.CTkButton(ligne, text="🔧 VÉRIFIER LES FICHIERS", width=190, fg_color=MAGENTA,
+                             hover_color="#cc00cc",
                              command=lambda i=appid, n=nom: self.reparer_jeu_specifique(i, n)).pack(pady=(0, 8))
             elif plateforme == "Epic":
                 ctk.CTkButton(ligne, text="🚀 OUVRIR EPIC LAUNCHER", width=190, fg_color=MAGENTA,
+                             hover_color="#cc00cc",
                              command=lambda n=nom: self.ouvrir_epic_launcher(n)).pack(pady=(0, 8))
             else:
                 ctk.CTkButton(ligne, text="ℹ️ COMMENT RÉPARER", width=190, fg_color="#444444",
+                             hover_color="#5a5a5a",
                              command=lambda n=nom: self.afficher_instructions_manuelles(n)).pack(pady=(0, 8))
 
     # ---------------------------------------------------------------
@@ -445,7 +485,7 @@ class GameFixerApp(ctk.CTk):
     def setup_community_tab(self):
         """Interface de contribution + gestion (modifier/supprimer) de la base"""
         ctk.CTkLabel(self.tab_commu, text="--- AJOUTER / MODIFIER UN JEU ---",
-                    font=("Consolas", 16, "bold"), text_color=MAGENTA).pack(pady=(12, 8))
+                    font=FONT_SECTION, text_color=MAGENTA).pack(pady=(12, 8))
 
         style_champ = {"width": 400, "height": 36, "fg_color": "black", "border_color": "#301050"}
 
@@ -477,7 +517,7 @@ class GameFixerApp(ctk.CTk):
         self.btn_save.pack(side="left", padx=5)
 
         self.btn_annuler = ctk.CTkButton(boutons_form, text="✖ ANNULER", fg_color="#444444",
-                                         command=self.annuler_edition)
+                                         hover_color="#5a5a5a", command=self.annuler_edition)
         # Caché tant qu'on n'édite pas une entrée existante
 
         # --- Partage manuel de la base (export/import JSON) ---
@@ -485,15 +525,15 @@ class GameFixerApp(ctk.CTk):
         boutons_partage.pack(pady=(0, 8))
 
         ctk.CTkButton(boutons_partage, text="📤 EXPORTER LA BASE", fg_color="transparent",
-                     border_color=CYAN, border_width=2, text_color=CYAN,
+                     border_color=CYAN, border_width=2, text_color=CYAN, hover_color="#062226",
                      command=self.exporter_base).pack(side="left", padx=5)
 
         ctk.CTkButton(boutons_partage, text="📥 IMPORTER UNE BASE", fg_color="transparent",
-                     border_color=CYAN, border_width=2, text_color=CYAN,
+                     border_color=CYAN, border_width=2, text_color=CYAN, hover_color="#062226",
                      command=self.importer_base).pack(side="left", padx=5)
 
         ctk.CTkButton(boutons_partage, text="🔄 SYNC GITHUB", fg_color="transparent",
-                     border_color=MAGENTA, border_width=2, text_color=MAGENTA,
+                     border_color=MAGENTA, border_width=2, text_color=MAGENTA, hover_color="#2e002e",
                      command=self.synchroniser_github).pack(side="left", padx=5)
 
         # --- Recherche + liste de la base actuelle ---
@@ -507,6 +547,7 @@ class GameFixerApp(ctk.CTk):
             label_text="📚 BASE ACTUELLE",
             label_font=("Consolas", 12, "bold"),
             label_text_color=CYAN,
+            label_fg_color="#0a0b10",
             fg_color="#0a0b10",
             corner_radius=10,
             border_width=1,
