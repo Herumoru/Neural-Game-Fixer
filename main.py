@@ -233,12 +233,24 @@ class GameFixerApp(ctk.CTk):
 
     def trouver_dossiers_steamapps_via_config(self):
         """Lit la vraie configuration Steam (libraryfolders.vdf) pour lister TOUTES les
-        bibliothèques déclarées, même sur un disque/dossier personnalisé."""
+        bibliothèques déclarées, même sur un disque/dossier personnalisé.
+        FIX : la bibliothèque principale peut être listée à la fois via le registre et via
+        libraryfolders.vdf, parfois avec une casse ou des séparateurs différents (Windows
+        étant insensible à la casse) — on normalise avant de comparer pour éviter les doublons."""
         chemin_steam = self.trouver_chemin_steam()
         if not chemin_steam:
             return []
 
-        dossiers = [os.path.join(chemin_steam, "steamapps")]
+        dossiers = []
+        cles_vues = set()
+
+        def ajouter(dossier):
+            cle = os.path.normcase(os.path.normpath(dossier))
+            if cle not in cles_vues:
+                cles_vues.add(cle)
+                dossiers.append(dossier)
+
+        ajouter(os.path.join(chemin_steam, "steamapps"))
 
         fichier_vdf = os.path.join(chemin_steam, "steamapps", "libraryfolders.vdf")
         if os.path.exists(fichier_vdf):
@@ -247,9 +259,7 @@ class GameFixerApp(ctk.CTk):
                     contenu = f.read()
                 for chemin_lib in re.findall(r'"path"\s+"([^"]+)"', contenu):
                     chemin_lib = chemin_lib.replace("\\\\", "\\")
-                    dossier = os.path.join(chemin_lib, "steamapps")
-                    if dossier not in dossiers:
-                        dossiers.append(dossier)
+                    ajouter(os.path.join(chemin_lib, "steamapps"))
             except OSError:
                 pass
 
@@ -367,12 +377,23 @@ class GameFixerApp(ctk.CTk):
         return jeux_trouves
 
     def detecter_tous_les_jeux(self):
-        """Combine la détection de tous les launchers supportés (Steam + Epic + Battle.net)."""
-        return (
+        """Combine la détection de tous les launchers supportés (Steam + Epic + Battle.net).
+        FIX : dédoublonne par nom au cas où un même jeu remonterait deux fois (ex: chemin
+        dupliqué dans product.db, bibliothèque Steam comptée deux fois)."""
+        tous = (
             self.detecter_tous_les_jeux_steam()
             + self.detecter_tous_les_jeux_epic()
             + self.detecter_tous_les_jeux_battlenet()
         )
+
+        cles_vues = set()
+        resultat = []
+        for jeu in tous:
+            cle = jeu["nom"].strip().lower()
+            if cle not in cles_vues:
+                cles_vues.add(cle)
+                resultat.append(jeu)
+        return resultat
 
     def croiser_avec_base_de_donnees(self, jeux_detectes):
         """Associe à chaque jeu détecté sa fiche bug/solution si elle existe dans bugs_data.json."""
