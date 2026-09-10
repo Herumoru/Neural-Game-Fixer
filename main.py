@@ -6,12 +6,19 @@ import re
 import string
 import webbrowser
 import requests
+import subprocess
+import shutil
+import ctypes
+import datetime
 from tkinter import filedialog, messagebox
 
 try:
     import winreg  # Disponible uniquement sur Windows
 except ImportError:
     winreg = None
+
+ORANGE = "#ffaa00"
+ROUGE = "#ff4444"
 
 # Couleurs Cyberpunk
 CYAN = "#00f3ff"
@@ -103,6 +110,7 @@ class GameFixerApp(ctk.CTk):
 
         self.tab_scan = self.tabs.add("🔍 Scanner")
         self.tab_commu = self.tabs.add("🤝 Communauté")
+        self.tab_diag = self.tabs.add("🩺 Diagnostic")
 
         # 2. Barre d'état flottante
         self.status_frame = ctk.CTkFrame(self, height=25, fg_color="transparent")
@@ -123,6 +131,7 @@ class GameFixerApp(ctk.CTk):
         # 3. Lancement des interfaces
         self.setup_scan_tab()
         self.setup_community_tab()
+        self.setup_diagnostic_tab()
         self.mettre_a_jour_compteur()
         self.rafraichir_liste_communaute()
 
@@ -233,22 +242,229 @@ class GameFixerApp(ctk.CTk):
             else:
                 ctk.CTkLabel(entete, text="Aucun bug connu", font=("Consolas", 10), text_color="#666666").pack(side="right", padx=10)
 
+            boutons_action = ctk.CTkFrame(ligne, fg_color="transparent")
+            boutons_action.pack(pady=(0, 8))
+
             if plateforme == "Steam" and appid:
-                ctk.CTkButton(ligne, text="🔧 VÉRIFIER LES FICHIERS", width=190, fg_color=MAGENTA,
+                ctk.CTkButton(boutons_action, text="🔧 VÉRIFIER LES FICHIERS", width=190, fg_color=MAGENTA,
                              hover_color="#cc00cc",
-                             command=lambda i=appid, n=nom: self.reparer_jeu_specifique(i, n)).pack(pady=(0, 8))
+                             command=lambda i=appid, n=nom: self.reparer_jeu_specifique(i, n)).pack(side="left", padx=3)
             elif plateforme == "Epic":
-                ctk.CTkButton(ligne, text="🚀 OUVRIR EPIC LAUNCHER", width=190, fg_color=MAGENTA,
+                ctk.CTkButton(boutons_action, text="🚀 OUVRIR EPIC LAUNCHER", width=190, fg_color=MAGENTA,
                              hover_color="#cc00cc",
-                             command=lambda n=nom: self.ouvrir_epic_launcher(n)).pack(pady=(0, 8))
+                             command=lambda n=nom: self.ouvrir_epic_launcher(n)).pack(side="left", padx=3)
             else:
-                ctk.CTkButton(ligne, text="ℹ️ COMMENT RÉPARER", width=190, fg_color="#444444",
+                ctk.CTkButton(boutons_action, text="ℹ️ COMMENT RÉPARER", width=190, fg_color="#444444",
                              hover_color="#5a5a5a",
-                             command=lambda n=nom: self.afficher_instructions_manuelles(n)).pack(pady=(0, 8))
+                             command=lambda n=nom: self.afficher_instructions_manuelles(n)).pack(side="left", padx=3)
+
+            ctk.CTkButton(boutons_action, text="🩺 ANALYSER LES CRASHS", width=190, fg_color="#1a1a3d",
+                         border_color=CYAN, border_width=1, hover_color="#26264d",
+                         command=lambda n=nom: self.analyser_crashs_jeu(n)).pack(side="left", padx=3)
 
     # ---------------------------------------------------------------
     # DÉTECTION STEAM (logique unifiée, avant dupliquée à deux endroits)
     # ---------------------------------------------------------------
+
+    # ---------------------------------------------------------------
+    # DIAGNOSTIC SYSTÈME (espace disque, RAM, pilote GPU, crashs)
+    # ---------------------------------------------------------------
+
+    def obtenir_espace_disque(self, lettre_disque):
+        """Retourne (libre_go, total_go) pour un disque donné (ex: 'C:\\\\')."""
+        try:
+            total, _utilise, libre = shutil.disk_usage(lettre_disque)
+            return round(libre / (1024 ** 3), 1), round(total / (1024 ** 3), 1)
+        except OSError:
+            return None, None
+
+    def obtenir_ram(self):
+        """RAM libre/totale via l'API Windows GlobalMemoryStatusEx (aucune dépendance
+        externe). Retourne (None, None) si indisponible (ex: pas sous Windows)."""
+        if not hasattr(ctypes, "windll"):
+            return None, None
+
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+        try:
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            return round(stat.ullAvailPhys / (1024 ** 3), 1), round(stat.ullTotalPhys / (1024 ** 3), 1)
+        except OSError:
+            return None, None
+
+    def obtenir_info_gpu(self):
+        """⚠️ EXPÉRIMENTAL : liste les cartes graphiques et la date de leur pilote via
+        PowerShell/WMI. Retourne une liste de (nom, date_lisible_ou_None)."""
+        try:
+            resultat = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-CimInstance Win32_VideoController | Select-Object Name,DriverDate | ConvertTo-Json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            donnees = json.loads(resultat.stdout)
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError):
+            return []
+
+        if isinstance(donnees, dict):
+            donnees = [donnees]
+
+        cartes = []
+        for carte in donnees or []:
+            nom = carte.get("Name") or "Carte graphique inconnue"
+            date_lisible = None
+            m = re.search(r"/Date\((\d+)", str(carte.get("DriverDate", "")))
+            if m:
+                try:
+                    date_lisible = datetime.datetime.fromtimestamp(int(m.group(1)) / 1000)
+                except (OSError, OverflowError, ValueError):
+                    date_lisible = None
+            cartes.append((nom, date_lisible))
+        return cartes
+
+    def lister_disques_a_verifier(self):
+        """Le disque système + tous ceux qui hébergent une bibliothèque Steam détectée."""
+        disques = {os.environ.get("SystemDrive", "C:") + "\\"}
+        for dossier in self.trouver_dossiers_steamapps():
+            lecteur = os.path.splitdrive(dossier)[0] + "\\"
+            disques.add(lecteur)
+        return sorted(disques)
+
+    def ajouter_ligne_diagnostic(self, titre, statut, detail, couleur):
+        """Affiche une ligne de résultat colorée (vert=OK, orange=attention, rouge=critique)."""
+        ligne = ctk.CTkFrame(self.frame_diagnostic, fg_color="gray20")
+        ligne.pack(pady=4, padx=5, fill="x")
+
+        entete = ctk.CTkFrame(ligne, fg_color="transparent")
+        entete.pack(fill="x")
+        ctk.CTkLabel(entete, text=titre, font=("Consolas", 12, "bold")).pack(side="left", padx=10, pady=6)
+        ctk.CTkLabel(entete, text=statut, font=("Consolas", 10, "bold"), text_color=couleur).pack(side="right", padx=10)
+
+        if detail:
+            ctk.CTkLabel(ligne, text=detail, font=("Consolas", 10), text_color="#aaaaaa",
+                        wraplength=550, justify="left").pack(anchor="w", padx=15, pady=(0, 6))
+
+    def lancer_diagnostic_systeme(self):
+        """Vérifie l'espace disque, la RAM et l'âge du pilote GPU — les causes les plus
+        courantes de plantages/ralentissements, tous jeux confondus."""
+        for child in self.frame_diagnostic.winfo_children():
+            child.destroy()
+
+        # --- Espace disque ---
+        for disque in self.lister_disques_a_verifier():
+            libre, total = self.obtenir_espace_disque(disque)
+            if libre is None:
+                continue
+            if libre < 10:
+                statut, couleur = "CRITIQUE", ROUGE
+            elif libre < 25:
+                statut, couleur = "ATTENTION", ORANGE
+            else:
+                statut, couleur = "OK", GREEN
+            self.ajouter_ligne_diagnostic(
+                f"💾 Disque {disque}", statut, f"{libre} Go libres sur {total} Go", couleur,
+            )
+
+        # --- RAM ---
+        libre_ram, total_ram = self.obtenir_ram()
+        if total_ram is not None:
+            if total_ram < 8:
+                statut, couleur = "FAIBLE", ORANGE
+                detail = f"{total_ram} Go au total ({libre_ram} Go libres) — 8 Go+ recommandés pour les jeux récents"
+            else:
+                statut, couleur = "OK", GREEN
+                detail = f"{total_ram} Go au total, {libre_ram} Go libres actuellement"
+            self.ajouter_ligne_diagnostic("🧠 Mémoire RAM", statut, detail, couleur)
+        else:
+            self.ajouter_ligne_diagnostic("🧠 Mémoire RAM", "N/A", "Impossible de lire la RAM sur ce système", "#666666")
+
+        # --- GPU / pilote ---
+        cartes = self.obtenir_info_gpu()
+        if not cartes:
+            self.ajouter_ligne_diagnostic("🖥 Carte graphique", "N/A",
+                                          "Impossible de lire les infos GPU (nécessite PowerShell)", "#666666")
+        else:
+            for nom, date_pilote in cartes:
+                if date_pilote is None:
+                    self.ajouter_ligne_diagnostic(f"🖥 {nom}", "N/A", "Date du pilote inconnue", "#666666")
+                    continue
+                age_jours = (datetime.datetime.now() - date_pilote).days
+                if age_jours > 365:
+                    statut, couleur = "PILOTE ANCIEN", ORANGE
+                else:
+                    statut, couleur = "OK", GREEN
+                self.ajouter_ligne_diagnostic(
+                    f"🖥 {nom}", statut,
+                    f"Pilote du {date_pilote.strftime('%d/%m/%Y')} ({age_jours} jours) — "
+                    "un pilote très ancien est une cause fréquente de plantages/bugs graphiques",
+                    couleur,
+                )
+
+    def setup_diagnostic_tab(self):
+        """Onglet de diagnostic système général (indépendant d'un jeu précis)."""
+        ctk.CTkLabel(self.tab_diag, text="🩺 DIAGNOSTIC SYSTÈME", font=FONT_SECTION, text_color=CYAN).pack(pady=15)
+        ctk.CTkLabel(self.tab_diag,
+                    text="Vérifie les causes les plus fréquentes de plantages/bugs, tous jeux confondus.",
+                    font=FONT_SOUS_TITRE, text_color="#8a8aa0", wraplength=550).pack(pady=(0, 10))
+
+        ctk.CTkButton(self.tab_diag, text="LANCER LE DIAGNOSTIC", border_color=CYAN, border_width=2,
+                     fg_color="transparent", text_color=CYAN, hover_color="#062226",
+                     command=self.lancer_diagnostic_systeme).pack(pady=5)
+
+        self.frame_diagnostic = ctk.CTkScrollableFrame(
+            self.tab_diag,
+            label_text="RÉSULTATS",
+            label_font=("Consolas", 12, "bold"),
+            label_text_color=CYAN,
+            label_fg_color="#0a0b10",
+            fg_color="#0a0b10",
+            corner_radius=10,
+            border_width=1,
+            border_color=CYAN,
+        )
+        self.frame_diagnostic.pack(pady=15, padx=15, fill="both", expand=True)
+
+    def analyser_crashs_jeu(self, nom_jeu):
+        """⚠️ EXPÉRIMENTAL : cherche des crashs récents ("Erreur d'application", Event ID
+        1000) dans le Journal d'événements Windows mentionnant ce jeu. Ne nécessite pas
+        de droits administrateur. Le format exact du texte peut varier selon la langue
+        et la version de Windows — best effort, à valider en conditions réelles."""
+        self.textbox.insert("end", f"\n[ DIAG ] : Recherche de crashs récents pour {nom_jeu}...\n")
+        try:
+            resultat = subprocess.run(
+                ["wevtutil", "qe", "Application",
+                 "/q:*[System[Provider[@Name='Application Error'] and (EventID=1000)]]",
+                 "/c:150", "/rd:true", "/f:text"],
+                capture_output=True, text=True, timeout=15,
+            )
+        except (OSError, subprocess.SubprocessError):
+            self.textbox.insert("end", "[!] Impossible de lire le Journal d'événements Windows.\n")
+            return
+
+        sortie = resultat.stdout or ""
+        blocs = [b for b in re.split(r"\n\s*\n", sortie) if b.strip()]
+        trouvailles = [b for b in blocs if nom_jeu.lower() in b.lower()]
+
+        if not trouvailles:
+            self.textbox.insert(
+                "end", f"[ OK ] : Aucun crash récent trouvé pour {nom_jeu} (150 dernières erreurs système passées en revue).\n"
+            )
+            return
+
+        self.textbox.insert("end", f"[!] {len(trouvailles)} crash(s) récent(s) trouvé(s) mentionnant {nom_jeu} :\n")
+        for bloc in trouvailles[:3]:
+            premiere_ligne = bloc.strip().splitlines()[0]
+            self.textbox.insert("end", f"    - {premiere_ligne}\n")
+        self.textbox.insert(
+            "end", "[ INFO ] : Détail complet dans l'Observateur d'événements Windows > Journaux Windows > Application.\n"
+        )
 
     def trouver_chemin_steam(self):
         """Trouve le dossier d'installation de Steam via le registre Windows (méthode fiable,
