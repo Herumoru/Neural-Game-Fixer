@@ -8,6 +8,11 @@ import webbrowser
 import requests
 from tkinter import filedialog, messagebox
 
+try:
+    import winreg  # Disponible uniquement sur Windows
+except ImportError:
+    winreg = None
+
 # Couleurs Cyberpunk
 CYAN = "#00f3ff"
 MAGENTA = "#ff00ff"
@@ -143,8 +148,8 @@ class GameFixerApp(ctk.CTk):
             self.executer_analyse_reelle()
 
     def executer_analyse_reelle(self):
-        self.textbox.insert("end", ">> LECTURE DES BIBLIOTHÈQUES STEAM...\n")
-        jeux_detectes = self.detecter_tous_les_jeux_steam()
+        self.textbox.insert("end", ">> LECTURE DES BIBLIOTHÈQUES (STEAM + EPIC + BATTLE.NET)...\n")
+        jeux_detectes = self.detecter_tous_les_jeux()
 
         if not jeux_detectes:
             self.textbox.insert("end", "[!] AUCUNE BIBLIOTHÈQUE / AUCUN JEU DÉTECTÉ.\n")
@@ -157,8 +162,8 @@ class GameFixerApp(ctk.CTk):
 
     def lancer_auto_detection(self):
         """Détection instantanée, sans animation (utilise la même logique que le scan complet)"""
-        self.textbox.insert("end", "\n[ SYSTEM ] : Scan des unités de stockage...\n")
-        jeux_detectes = self.detecter_tous_les_jeux_steam()
+        self.textbox.insert("end", "\n[ SYSTEM ] : Scan des launchers installés...\n")
+        jeux_detectes = self.detecter_tous_les_jeux()
         jeux_avec_infos = self.croiser_avec_base_de_donnees(jeux_detectes)
         self.afficher_jeux_detectes(jeux_avec_infos)
 
@@ -171,6 +176,7 @@ class GameFixerApp(ctk.CTk):
 
         for jeu in jeux_avec_infos:
             nom, appid, infos = jeu["nom"], jeu["id"], jeu["infos"]
+            plateforme = jeu.get("plateforme", "Steam")
 
             ligne = ctk.CTkFrame(self.scrollable_frame, fg_color="gray20")
             ligne.pack(pady=5, padx=5, fill="x")
@@ -178,6 +184,8 @@ class GameFixerApp(ctk.CTk):
             entete = ctk.CTkFrame(ligne, fg_color="transparent")
             entete.pack(fill="x")
             ctk.CTkLabel(entete, text=f"🎮 {nom[:30]}", font=("Consolas", 12, "bold")).pack(side="left", padx=10, pady=5)
+            ctk.CTkLabel(entete, text=plateforme.upper(), font=("Consolas", 9, "bold"),
+                        text_color="#888888").pack(side="left", padx=5)
 
             if infos:
                 ctk.CTkLabel(entete, text="⚠ BUG CONNU", font=("Consolas", 10, "bold"), text_color=MAGENTA).pack(side="right", padx=10)
@@ -188,15 +196,68 @@ class GameFixerApp(ctk.CTk):
             else:
                 ctk.CTkLabel(entete, text="Aucun bug connu", font=("Consolas", 10), text_color="#666666").pack(side="right", padx=10)
 
-            ctk.CTkButton(ligne, text="🔧 VÉRIFIER LES FICHIERS", width=190, fg_color=MAGENTA,
-                         command=lambda i=appid, n=nom: self.reparer_jeu_specifique(i, n)).pack(pady=(0, 8))
+            if plateforme == "Steam" and appid:
+                ctk.CTkButton(ligne, text="🔧 VÉRIFIER LES FICHIERS", width=190, fg_color=MAGENTA,
+                             command=lambda i=appid, n=nom: self.reparer_jeu_specifique(i, n)).pack(pady=(0, 8))
+            elif plateforme == "Epic":
+                ctk.CTkButton(ligne, text="🚀 OUVRIR EPIC LAUNCHER", width=190, fg_color=MAGENTA,
+                             command=lambda n=nom: self.ouvrir_epic_launcher(n)).pack(pady=(0, 8))
+            else:
+                ctk.CTkButton(ligne, text="ℹ️ COMMENT RÉPARER", width=190, fg_color="#444444",
+                             command=lambda n=nom: self.afficher_instructions_manuelles(n)).pack(pady=(0, 8))
 
     # ---------------------------------------------------------------
     # DÉTECTION STEAM (logique unifiée, avant dupliquée à deux endroits)
     # ---------------------------------------------------------------
 
-    def trouver_dossiers_steamapps(self):
-        """Retourne tous les dossiers 'steamapps' existants, tous disques (A à Z) confondus."""
+    def trouver_chemin_steam(self):
+        """Trouve le dossier d'installation de Steam via le registre Windows (méthode fiable,
+        fonctionne quel que soit le disque ou le nom de dossier choisi à l'installation)."""
+        if winreg is None:
+            return None
+
+        cles_a_essayer = (
+            (winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath"),
+        )
+        for ruche, sous_cle, nom_valeur in cles_a_essayer:
+            try:
+                with winreg.OpenKey(ruche, sous_cle) as cle:
+                    valeur, _ = winreg.QueryValueEx(cle, nom_valeur)
+                    if valeur and os.path.exists(valeur):
+                        return valeur
+            except OSError:
+                continue
+        return None
+
+    def trouver_dossiers_steamapps_via_config(self):
+        """Lit la vraie configuration Steam (libraryfolders.vdf) pour lister TOUTES les
+        bibliothèques déclarées, même sur un disque/dossier personnalisé."""
+        chemin_steam = self.trouver_chemin_steam()
+        if not chemin_steam:
+            return []
+
+        dossiers = [os.path.join(chemin_steam, "steamapps")]
+
+        fichier_vdf = os.path.join(chemin_steam, "steamapps", "libraryfolders.vdf")
+        if os.path.exists(fichier_vdf):
+            try:
+                with open(fichier_vdf, "r", encoding="utf-8") as f:
+                    contenu = f.read()
+                for chemin_lib in re.findall(r'"path"\s+"([^"]+)"', contenu):
+                    chemin_lib = chemin_lib.replace("\\\\", "\\")
+                    dossier = os.path.join(chemin_lib, "steamapps")
+                    if dossier not in dossiers:
+                        dossiers.append(dossier)
+            except OSError:
+                pass
+
+        return [d for d in dossiers if os.path.exists(d)]
+
+    def trouver_dossiers_steamapps_par_balayage(self):
+        """Méthode de secours : devine les emplacements en scannant chaque lettre de disque.
+        Utilisée seulement si la lecture du registre/config Steam échoue."""
         dossiers = []
         for lettre in string.ascii_uppercase:
             base = f"{lettre}:\\"
@@ -207,6 +268,14 @@ class GameFixerApp(ctk.CTk):
                 if os.path.exists(sous_chemin):
                     dossiers.append(sous_chemin)
         return dossiers
+
+    def trouver_dossiers_steamapps(self):
+        """Retourne tous les dossiers 'steamapps' réels de Steam : d'abord via sa config
+        (fiable), et seulement si ça échoue, via le balayage des disques (secours)."""
+        dossiers = self.trouver_dossiers_steamapps_via_config()
+        if dossiers:
+            return dossiers
+        return self.trouver_dossiers_steamapps_par_balayage()
 
     def detecter_tous_les_jeux_steam(self):
         """Lit les fichiers appmanifest*.acf pour lister tous les jeux réellement installés
@@ -225,10 +294,79 @@ class GameFixerApp(ctk.CTk):
                             contenu = f.read()
                         nom = re.search(r'"name"\s+"(.*?)"', contenu).group(1)
                         appid = re.search(r'"appid"\s+"(\d+)"', contenu).group(1)
-                        jeux_trouves.append({"nom": nom, "id": appid})
+                        jeux_trouves.append({"nom": nom, "id": appid, "plateforme": "Steam"})
                     except (AttributeError, OSError):
                         continue  # fichier .acf mal formé ou illisible
         return jeux_trouves
+
+    def detecter_tous_les_jeux_epic(self):
+        """Lit les manifestes (.item, au format JSON) d'Epic Games Launcher pour lister
+        les jeux installés. Emplacement fixe, pas besoin de deviner un chemin."""
+        dossier_manifests = os.path.join(
+            os.environ.get("PROGRAMDATA", r"C:\ProgramData"),
+            "Epic", "EpicGamesLauncher", "Data", "Manifests",
+        )
+        jeux_trouves = []
+        if not os.path.isdir(dossier_manifests):
+            return jeux_trouves
+
+        for fichier in os.listdir(dossier_manifests):
+            if not fichier.endswith(".item"):
+                continue
+            chemin_complet = os.path.join(dossier_manifests, fichier)
+            try:
+                with open(chemin_complet, "r", encoding="utf-8") as f:
+                    manifest = json.load(f)
+                nom = manifest.get("DisplayName")
+                if nom:
+                    jeux_trouves.append({"nom": nom, "id": None, "plateforme": "Epic"})
+            except (OSError, json.JSONDecodeError):
+                continue  # fichier .item mal formé ou illisible
+        return jeux_trouves
+
+    def detecter_tous_les_jeux_battlenet(self):
+        """⚠️ EXPÉRIMENTAL : Battle.net n'a pas de format ouvert comme Steam/Epic. Ses jeux
+        installés sont listés dans product.db, un fichier binaire (protobuf) sans schéma
+        officiel. On extrait ici les chemins d'installation lisibles directement dans le
+        fichier brut (comme la commande 'strings'), sans décoder le protobuf complet.
+        Peut remonter du bruit ou rater des jeux selon la version de Battle.net."""
+        chemin_db = os.path.join(
+            os.environ.get("PROGRAMDATA", r"C:\ProgramData"),
+            "Battle.net", "Agent", "product.db",
+        )
+        jeux_trouves = []
+        if not os.path.isfile(chemin_db):
+            return jeux_trouves
+
+        try:
+            with open(chemin_db, "rb") as f:
+                contenu_brut = f.read()
+        except OSError:
+            return jeux_trouves
+
+        # Cherche les séquences de caractères imprimables contenant un "\", signe probable
+        # d'un chemin d'installation Windows enfoui dans les données binaires
+        chemins_bruts = re.findall(rb"[ -~]{4,}\\[ -~]{2,}", contenu_brut)
+        noms_vus = set()
+
+        for chemin_bytes in chemins_bruts:
+            chemin = chemin_bytes.decode("utf-8", errors="ignore")
+            if "\\" not in chemin:
+                continue
+            nom = os.path.basename(chemin.rstrip("\\"))
+            if nom and len(nom) > 2 and nom not in noms_vus:
+                noms_vus.add(nom)
+                jeux_trouves.append({"nom": nom, "id": None, "plateforme": "Battle.net"})
+
+        return jeux_trouves
+
+    def detecter_tous_les_jeux(self):
+        """Combine la détection de tous les launchers supportés (Steam + Epic + Battle.net)."""
+        return (
+            self.detecter_tous_les_jeux_steam()
+            + self.detecter_tous_les_jeux_epic()
+            + self.detecter_tous_les_jeux_battlenet()
+        )
 
     def croiser_avec_base_de_donnees(self, jeux_detectes):
         """Associe à chaque jeu détecté sa fiche bug/solution si elle existe dans bugs_data.json."""
@@ -253,6 +391,25 @@ class GameFixerApp(ctk.CTk):
             self.textbox.insert("end", "[ OK ] : Steam a ouvert la fenêtre de vérification.\n")
         else:
             self.textbox.insert("end", "[!] PAS D'ID STEAM TROUVÉ.\n")
+
+    def ouvrir_epic_launcher(self, nom_jeu):
+        """Epic ne propose pas d'équivalent à steam://validate/ : on ouvre le launcher
+        et on indique la manip manuelle (Bibliothèque > ⋯ > Vérifier)."""
+        self.textbox.insert("end", f"\n[ INFO ] : Ouverture d'Epic Games Launcher pour {nom_jeu}...\n")
+        self.textbox.insert("end", "[ INFO ] : Dans Epic, clic sur les ⋯ du jeu > Vérifier.\n")
+        webbrowser.open("com.epicgames.launcher://start")
+
+    def afficher_instructions_manuelles(self, nom_jeu):
+        """Pour les plateformes sans vérification automatisée fiable (Battle.net...) :
+        on affiche la marche à suivre plutôt que de deviner une commande qui risquerait
+        de ne pas fonctionner."""
+        self.textbox.insert(
+            "end",
+            f"\n[ INFO ] : Pour {nom_jeu}, ouvre Battle.net > clique sur le jeu > "
+            "roue crantée ⚙ > Analyse et réparation.\n",
+        )
+
+
 
     # ---------------------------------------------------------------
     # ONGLET COMMUNAUTÉ
