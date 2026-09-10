@@ -324,6 +324,9 @@ class GameFixerApp(ctk.CTk):
                 continue  # fichier .item mal formé ou illisible
         return jeux_trouves
 
+    # Dossiers trouvés dans product.db qui ne sont pas des jeux (le launcher lui-même, etc.)
+    EXCLUS_BATTLENET = {"battle.net", "agent", "blizzard entertainment"}
+
     def detecter_tous_les_jeux_battlenet(self):
         """⚠️ EXPÉRIMENTAL : Battle.net n'a pas de format ouvert comme Steam/Epic. Ses jeux
         installés sont listés dans product.db, un fichier binaire (protobuf) sans schéma
@@ -344,17 +347,20 @@ class GameFixerApp(ctk.CTk):
         except OSError:
             return jeux_trouves
 
-        # Cherche les séquences de caractères imprimables contenant un "\", signe probable
-        # d'un chemin d'installation Windows enfoui dans les données binaires
-        chemins_bruts = re.findall(rb"[ -~]{4,}\\[ -~]{2,}", contenu_brut)
+        # Battle.net stocke ses chemins avec des slashs ("C:/Program Files/...") et non des
+        # antislashs comme le reste de Windows. On cherche un chemin qui commence par une
+        # lettre de disque, peu importe le séparateur utilisé.
+        chemins_bruts = re.findall(rb"[A-Za-z]:[\\/][ -~]{2,}", contenu_brut)
         noms_vus = set()
 
         for chemin_bytes in chemins_bruts:
             chemin = chemin_bytes.decode("utf-8", errors="ignore")
-            if "\\" not in chemin:
+            nom = os.path.basename(chemin.rstrip("/\\"))
+            if not nom or len(nom) <= 2:
                 continue
-            nom = os.path.basename(chemin.rstrip("\\"))
-            if nom and len(nom) > 2 and nom not in noms_vus:
+            if nom.lower() in self.EXCLUS_BATTLENET:
+                continue
+            if nom not in noms_vus:
                 noms_vus.add(nom)
                 jeux_trouves.append({"nom": nom, "id": None, "plateforme": "Battle.net"})
 
