@@ -10,6 +10,7 @@ import subprocess
 import shutil
 import ctypes
 import datetime
+import urllib.parse
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageDraw
 
@@ -193,6 +194,7 @@ PLACEHOLDER_SOLUTION = "ÉCRIVEZ LA SOLUTION ICI..."
 # ⚠️ À CONFIGURER : remplace par l'URL "raw" de ton bugs_data.json sur GitHub
 # (sur GitHub : ouvre bugs_data.json > bouton "Raw" > copie l'URL)
 URL_GITHUB_RAW = "https://raw.githubusercontent.com/Herumoru/Neural-Game-Fixer/main/bugs_data.json"
+URL_GITHUB_ISSUES = "https://github.com/Herumoru/Neural-Game-Fixer/issues/new"
 
 
 def chemin_base_donnees():
@@ -910,6 +912,11 @@ class GameFixerApp(ctk.CTk):
                                       command=self.ajouter_bug_commu)
         self.btn_save.pack(side="left", padx=5)
 
+        ctk.CTkButton(boutons_form, text="PROPOSER SUR GITHUB", fg_color="transparent",
+                     border_color=CYAN, border_width=2, text_color=CYAN, hover_color="#062226",
+                     image=obtenir_icone("communaute", CYAN, 16), compound="left",
+                     command=self.proposer_sur_github).pack(side="left", padx=5)
+
         self.btn_annuler = ctk.CTkButton(boutons_form, text="ANNULER", fg_color="#444444",
                                          hover_color="#5a5a5a",
                                          image=obtenir_icone("croix", "white", 14), compound="left",
@@ -961,6 +968,38 @@ class GameFixerApp(ctk.CTk):
     def _restaurer_placeholder_solution(self, event=None):
         if not self.txt_sol.get("0.0", "end").strip():
             self.txt_sol.insert("0.0", PLACEHOLDER_SOLUTION)
+
+    def proposer_sur_github(self):
+        """Ouvre une issue GitHub pré-remplie avec le contenu du formulaire, pour que
+        n'importe quel utilisateur de l'appli puisse proposer une contribution avec son
+        propre compte GitHub — sans que l'appli n'ait jamais besoin de stocker un token."""
+        jeu = self.ent_jeu.get().strip()
+        steam_id = self.ent_id.get().strip()
+        bug = self.ent_bug.get().strip()
+        sol = self.txt_sol.get("0.0", "end").strip()
+        if sol == PLACEHOLDER_SOLUTION:
+            sol = ""
+
+        if not jeu:
+            messagebox.showwarning("Champ manquant", "Renseigne au moins le nom du jeu avant de proposer une contribution.")
+            return
+
+        titre = f"Nouveau bug : {jeu}"
+        corps = (
+            f"**Jeu** : {jeu}\n"
+            f"**ID Steam** : {steam_id or 'N/A'}\n"
+            f"**Bug** : {bug or 'N/A'}\n"
+            f"**Solution** : {sol or 'N/A'}\n"
+        )
+        url = (
+            f"{URL_GITHUB_ISSUES}?title={urllib.parse.quote(titre)}"
+            f"&body={urllib.parse.quote(corps)}&labels=contribution"
+        )
+        webbrowser.open(url)
+        self.textbox.insert(
+            "end", f"\n[ INFO ] : Page GitHub ouverte pour proposer {jeu}. "
+            "Connecte-toi avec ton compte GitHub pour valider la contribution.\n",
+        )
 
     def ajouter_bug_commu(self):
         jeu = self.ent_jeu.get().strip()
