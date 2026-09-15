@@ -19,25 +19,40 @@ try:
 except ImportError:
     winreg = None
 
-ORANGE = "#ffaa00"
-ROUGE = "#ff4444"
+# ---------------------------------------------------------------
+# CHARTE GRAPHIQUE — claire, sobre, une seule couleur d'accent
+# ---------------------------------------------------------------
+ctk.set_appearance_mode("light")
 
-# Couleurs Cyberpunk
-CYAN = "#00f3ff"
-MAGENTA = "#ff00ff"
-DARK_BG = "#0d0221"
-GREEN = "#39ff14"
+BG = "#F4F6F9"            # fond de la fenêtre
+SURFACE = "#FFFFFF"       # cartes, en-tête, champs
+SURFACE_2 = "#EEF1F5"     # zones de liste, journal, survol
+BORDER = "#E1E5EA"
+TEXT = "#1F2933"
+TEXT_MUTED = "#6B7280"
 
-# Polices : Bahnschrift (fournie avec Windows) pour les titres/l'interface,
-# Consolas (monospace) pour tout ce qui doit "avoir l'air d'un terminal"
-FONT_TITRE_APP = ("Bahnschrift SemiBold", 20, "bold")
-FONT_SOUS_TITRE = ("Bahnschrift", 11)
-FONT_SECTION = ("Bahnschrift SemiBold", 16, "bold")
+ACCENT = "#2F6FED"        # bleu calme : couleur d'action principale
+ACCENT_HOVER = "#255CC6"
+
+SUCCESS = "#15803D"
+SUCCESS_SOFT = "#DCFCE7"
+WARNING = "#B45309"
+WARNING_SOFT = "#FEF3C7"
+DANGER = "#B91C1C"
+DANGER_SOFT = "#FEE2E2"
+
+# Segoe UI : la police de Windows lui-même, donc rendu natif et familier.
+# Consolas reste réservée au journal d'activité (contenu réellement "technique").
+F_TITRE = ("Segoe UI Semibold", 20)
+F_SECTION = ("Segoe UI Semibold", 16)
+F_CORPS = ("Segoe UI", 12)
+F_CORPS_GRAS = ("Segoe UI Semibold", 12)
+F_PETIT = ("Segoe UI", 11)
+F_BADGE = ("Segoe UI Semibold", 10)
+F_MONO = ("Consolas", 11)
 
 # ---------------------------------------------------------------
 # ICÔNES VECTORIELLES (dessinées en code, aucun fichier externe à gérer)
-# Un seul style de trait, cohérent, plutôt que des emojis qui rendent
-# différemment selon la machine.
 # ---------------------------------------------------------------
 
 def _icone_recherche(d, c, e):
@@ -147,6 +162,10 @@ def _icone_croix(d, c, e):
     d.line([78, 22, 22, 78], fill=c, width=e)
 
 
+def _icone_coche(d, c, e):
+    d.line([16, 52, 40, 76, 84, 26], fill=c, width=e, joint="curve")
+
+
 _DESSINS_ICONES = {
     "recherche": _icone_recherche,
     "communaute": _icone_communaute,
@@ -165,14 +184,15 @@ _DESSINS_ICONES = {
     "download": _icone_download,
     "sync": _icone_sync,
     "croix": _icone_croix,
+    "coche": _icone_coche,
 }
 
 _CACHE_ICONES = {}
 
 
-def obtenir_icone(nom, couleur=CYAN, taille=20, epaisseur=7):
-    """Dessine (et met en cache) une icône vectorielle prête à l'emploi dans un
-    CTkButton/CTkLabel via le paramètre image=. Aucun fichier externe requis."""
+def obtenir_icone(nom, couleur=TEXT_MUTED, taille=16, epaisseur=6):
+    """Dessine (et met en cache) une icône vectorielle utilisable dans un
+    CTkButton/CTkLabel via image=. Aucun fichier externe requis."""
     cle = (nom, couleur, taille)
     if cle not in _CACHE_ICONES:
         img = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
@@ -181,173 +201,199 @@ def obtenir_icone(nom, couleur=CYAN, taille=20, epaisseur=7):
     return _CACHE_ICONES[cle]
 
 
-def titre_section(parent, nom_icone, texte, couleur=CYAN, taille_icone=22):
-    """Frame titre avec icône + texte, à la place des décorations façon emoji/tirets."""
+# ---------------------------------------------------------------
+# COMPOSANTS D'INTERFACE RÉUTILISABLES
+# ---------------------------------------------------------------
+
+def bouton_primaire(parent, texte, nom_icone, command, width=0):
+    """Action principale : plein, couleur d'accent, texte blanc."""
+    return ctk.CTkButton(
+        parent, text=texte, command=command, width=width, height=36, corner_radius=8,
+        fg_color=ACCENT, hover_color=ACCENT_HOVER, text_color="white", font=F_CORPS_GRAS,
+        image=obtenir_icone(nom_icone, "white") if nom_icone else None, compound="left",
+    )
+
+
+def bouton_secondaire(parent, texte, nom_icone, command, width=0, couleur_texte=TEXT, survol=SURFACE_2):
+    """Action secondaire : fond blanc, bordure fine, texte sombre."""
+    return ctk.CTkButton(
+        parent, text=texte, command=command, width=width, height=36, corner_radius=8,
+        fg_color=SURFACE, hover_color=survol, border_width=1, border_color=BORDER,
+        text_color=couleur_texte, font=F_CORPS_GRAS,
+        image=obtenir_icone(nom_icone, couleur_texte) if nom_icone else None, compound="left",
+    )
+
+
+def bouton_icone(parent, nom_icone, command, couleur=TEXT_MUTED, survol=SURFACE_2):
+    """Petit bouton carré avec seulement une icône (modifier, supprimer...)."""
+    return ctk.CTkButton(
+        parent, text="", command=command, width=34, height=32, corner_radius=8,
+        fg_color=SURFACE, hover_color=survol, border_width=1, border_color=BORDER,
+        image=obtenir_icone(nom_icone, couleur, 15),
+    )
+
+
+def badge(parent, texte, couleur_texte, couleur_fond):
+    """Petite étiquette arrondie (statut, plateforme...)."""
+    return ctk.CTkLabel(parent, text=texte, font=F_BADGE, text_color=couleur_texte,
+                        fg_color=couleur_fond, corner_radius=6, padx=8, pady=2)
+
+
+def carte(parent):
+    """Carte blanche à bordure fine, brique de base des listes."""
+    return ctk.CTkFrame(parent, fg_color=SURFACE, corner_radius=10, border_width=1, border_color=BORDER)
+
+
+def zone_liste(parent, titre):
+    """Zone défilante gris clair avec un titre discret."""
+    return ctk.CTkScrollableFrame(
+        parent, label_text=titre, label_font=F_CORPS_GRAS, label_text_color=TEXT_MUTED,
+        label_fg_color=SURFACE_2, label_anchor="w", fg_color=SURFACE_2, corner_radius=10,
+        border_width=1, border_color=BORDER,
+        scrollbar_fg_color=SURFACE_2, scrollbar_button_color="#C7CDD6", scrollbar_button_hover_color="#AEB6C2",
+    )
+
+
+def champ(parent, placeholder, width=440):
+    return ctk.CTkEntry(
+        parent, placeholder_text=placeholder, width=width, height=38, corner_radius=8,
+        fg_color=SURFACE, border_color=BORDER, border_width=1, text_color=TEXT,
+        placeholder_text_color=TEXT_MUTED, font=F_CORPS,
+    )
+
+
+def titre_section(parent, nom_icone, texte, sous_titre=None):
+    """Titre d'onglet : icône + titre, avec une phrase d'explication en dessous."""
     cadre = ctk.CTkFrame(parent, fg_color="transparent")
-    ctk.CTkLabel(cadre, text="", image=obtenir_icone(nom_icone, couleur, taille_icone)).pack(side="left", padx=(0, 8))
-    ctk.CTkLabel(cadre, text=texte, font=FONT_SECTION, text_color=couleur).pack(side="left")
+    ligne = ctk.CTkFrame(cadre, fg_color="transparent")
+    ligne.pack(anchor="w")
+    ctk.CTkLabel(ligne, text="", image=obtenir_icone(nom_icone, ACCENT, 22)).pack(side="left", padx=(0, 8))
+    ctk.CTkLabel(ligne, text=texte, font=F_SECTION, text_color=TEXT).pack(side="left")
+    if sous_titre:
+        ctk.CTkLabel(cadre, text=sous_titre, font=F_PETIT, text_color=TEXT_MUTED,
+                     wraplength=640, justify="left").pack(anchor="w", pady=(2, 0))
     return cadre
 
 
-PLACEHOLDER_SOLUTION = "ÉCRIVEZ LA SOLUTION ICI..."
+PLACEHOLDER_SOLUTION = "Décris la solution qui a fonctionné…"
 
-# ⚠️ À CONFIGURER : remplace par l'URL "raw" de ton bugs_data.json sur GitHub
-# (sur GitHub : ouvre bugs_data.json > bouton "Raw" > copie l'URL)
 URL_GITHUB_RAW = "https://raw.githubusercontent.com/Herumoru/Neural-Game-Fixer/main/bugs_data.json"
 URL_GITHUB_ISSUES = "https://github.com/Herumoru/Neural-Game-Fixer/issues/new"
 
 
-def chemin_base_donnees():
-    """Retourne le chemin de bugs_data.json à côté du script OU de l'exécutable .exe,
-    peu importe le dossier depuis lequel l'appli est lancée."""
+def _dossier_application():
+    """Dossier du script OU de l'exécutable .exe, peu importe d'où l'appli est lancée."""
     if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_dir, "bugs_data.json")
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 
-def chemin_icone():
-    """Même logique que chemin_base_donnees(), pour trouver icon.ico à côté du script/exe."""
-    if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_dir, "icon.ico")
-
-
-CHEMIN_DB = chemin_base_donnees()
-CHEMIN_ICONE = chemin_icone()
+CHEMIN_DB = os.path.join(_dossier_application(), "bugs_data.json")
+CHEMIN_ICONE = os.path.join(_dossier_application(), "icon.ico")
 
 
 class GameFixerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # Fenêtre principale
-        self.title("NEURAL GAME FIXER")
-        self.geometry("750x820")
-        self.configure(fg_color=DARK_BG)
+        self.title("Neural Game Fixer")
+        self.geometry("780x840")
+        self.configure(fg_color=BG)
 
         try:
             self.iconbitmap(CHEMIN_ICONE)
         except Exception:
-            pass  # Pas bloquant si l'icône est absente (ex: premier lancement sans le fichier)
+            pass  # Pas bloquant si l'icône est absente
 
-        # FIX : évite un AttributeError si "Réparer" est cliqué avant tout scan
         self.jeu_detecte_actuel = None
+        self.jeu_en_edition = None  # Nom du jeu en cours de modification (None = mode ajout)
 
-        # Nom du jeu actuellement en cours de modification (None = mode ajout)
-        self.jeu_en_edition = None
-
-        # 0. Bandeau d'en-tête
-        entete = ctk.CTkFrame(self, fg_color="#100228", corner_radius=0, height=64)
+        # --- En-tête ---
+        entete = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=0, height=64)
         entete.pack(fill="x", side="top")
         entete.pack_propagate(False)
 
         bloc_titre = ctk.CTkFrame(entete, fg_color="transparent")
-        bloc_titre.pack(side="left", padx=20, pady=8)
+        bloc_titre.pack(side="left", padx=24, pady=10)
         ligne_titre = ctk.CTkFrame(bloc_titre, fg_color="transparent")
         ligne_titre.pack(anchor="w")
-        ctk.CTkLabel(ligne_titre, text="", image=obtenir_icone("eclair", CYAN, 22)).pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(ligne_titre, text="NEURAL GAME FIXER", font=FONT_TITRE_APP,
-                    text_color=CYAN).pack(side="left")
-        ctk.CTkLabel(bloc_titre, text="Détection & réparation · Steam · Epic · Battle.net",
-                    font=FONT_SOUS_TITRE, text_color="#8a8aa0").pack(anchor="w")
+        ctk.CTkLabel(ligne_titre, text="", image=obtenir_icone("eclair", ACCENT, 22)).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(ligne_titre, text="Neural Game Fixer", font=F_TITRE, text_color=TEXT).pack(side="left")
+        ctk.CTkLabel(bloc_titre, text="Détection et réparation de jeux · Steam, Epic Games, Battle.net",
+                     font=F_PETIT, text_color=TEXT_MUTED).pack(anchor="w")
 
-        ctk.CTkFrame(self, fg_color=MAGENTA, height=2, corner_radius=0).pack(fill="x", side="top")
+        ctk.CTkFrame(self, fg_color=BORDER, height=1, corner_radius=0).pack(fill="x", side="top")
 
-        # 1. Configuration des onglets
-        self.tabs = ctk.CTkTabview(self,
-                                   width=700,
-                                   height=680,
-                                   fg_color="#100228",
-                                   segmented_button_fg_color="#0d0221",
-                                   segmented_button_selected_color=CYAN,
-                                   segmented_button_selected_hover_color="#00444d",
-                                   border_width=2,
-                                   border_color="#1e054d")
-        self.tabs.pack(padx=20, pady=10)
+        # --- Barre d'état (en bas) ---
+        self.status_frame = ctk.CTkFrame(self, height=28, fg_color="transparent")
+        self.status_frame.pack(side="bottom", fill="x", pady=(0, 8))
 
-        self.tab_scan = self.tabs.add("Scanner")
-        self.tab_commu = self.tabs.add("Communauté")
+        self.lbl_status = ctk.CTkLabel(self.status_frame, text="●  Prêt", font=F_PETIT, text_color=SUCCESS)
+        self.lbl_status.pack(side="left", padx=28)
+
+        self.lbl_count = ctk.CTkLabel(self.status_frame, text="", font=F_PETIT, text_color=TEXT_MUTED)
+        self.lbl_count.pack(side="right", padx=28)
+
+        # --- Onglets ---
+        self.tabs = ctk.CTkTabview(
+            self, fg_color=SURFACE, corner_radius=12, border_width=1, border_color=BORDER,
+            segmented_button_fg_color=SURFACE_2,
+            segmented_button_selected_color=SURFACE, segmented_button_selected_hover_color=SURFACE,
+            segmented_button_unselected_color=SURFACE_2, segmented_button_unselected_hover_color="#E4E8EE",
+            text_color=TEXT,
+        )
+        self.tabs.pack(padx=20, pady=(12, 8), fill="both", expand=True)
+
+        self.tab_scan = self.tabs.add("Mes jeux")
+        self.tab_commu = self.tabs.add("Base de solutions")
         self.tab_diag = self.tabs.add("Diagnostic")
 
-        # 2. Barre d'état flottante
-        self.status_frame = ctk.CTkFrame(self, height=25, fg_color="transparent")
-        self.status_frame.pack(side="bottom", fill="x", pady=5)
-
-        self.lbl_status = ctk.CTkLabel(self.status_frame,
-                                       text="● SYSTEM_READY",
-                                       font=("Consolas", 10, "bold"),
-                                       text_color="#00ff41")
-        self.lbl_status.pack(side="left", padx=30)
-
-        self.lbl_count = ctk.CTkLabel(self.status_frame,
-                                      text="DB_ENTRIES: 0",
-                                      font=("Consolas", 10),
-                                      text_color="#666666")
-        self.lbl_count.pack(side="right", padx=30)
-
-        # 3. Lancement des interfaces
         self.setup_scan_tab()
         self.setup_community_tab()
         self.setup_diagnostic_tab()
         self.mettre_a_jour_compteur()
         self.rafraichir_liste_communaute()
 
+    # Petit utilitaire : écrire une ligne dans le journal d'activité
+    def journal(self, texte, effacer=False):
+        if effacer:
+            self.textbox.delete("0.0", "end")
+        self.textbox.insert("end", texte + "\n")
+        self.textbox.see("end")
+
     # ---------------------------------------------------------------
-    # ONGLET SCANNER
+    # ONGLET "MES JEUX"
     # ---------------------------------------------------------------
 
     def setup_scan_tab(self):
-        """Onglet pour scanner et réparer"""
-        titre_section(self.tab_scan, "eclair", "SYSTEM SCANNER", CYAN).pack(pady=15)
+        titre_section(
+            self.tab_scan, "manette", "Mes jeux",
+            "Détecte les jeux installés via Steam, Epic Games et Battle.net, et signale ceux qui ont un bug connu.",
+        ).pack(anchor="w", padx=16, pady=(14, 10))
 
-        boutons_frame = ctk.CTkFrame(self.tab_scan, fg_color="transparent")
-        boutons_frame.pack(pady=5)
+        boutons = ctk.CTkFrame(self.tab_scan, fg_color="transparent")
+        boutons.pack(anchor="w", padx=16, pady=(0, 10))
+        self.btn_scan = bouton_primaire(boutons, "Analyser mes jeux", "recherche", self.analyser_systeme)
+        self.btn_scan.pack(side="left", padx=(0, 8))
+        self.btn_auto_detect = bouton_secondaire(boutons, "Détection rapide", "eclair", self.lancer_auto_detection)
+        self.btn_auto_detect.pack(side="left")
 
-        self.btn_scan = ctk.CTkButton(boutons_frame, text="LANCER L'ANALYSE", border_color=CYAN, border_width=2,
-                                      fg_color="transparent", text_color=CYAN, hover_color="#062226",
-                                      image=obtenir_icone("eclair", CYAN, 16), compound="left",
-                                      command=self.analyser_systeme)
-        self.btn_scan.pack(side="left", padx=5)
-
-        self.btn_auto_detect = ctk.CTkButton(boutons_frame, text="DÉTECTION RAPIDE", border_color=CYAN,
-                                             border_width=2, fg_color="transparent", text_color=CYAN,
-                                             hover_color="#062226",
-                                             image=obtenir_icone("recherche", CYAN, 16), compound="left",
-                                             command=self.lancer_auto_detection)
-        self.btn_auto_detect.pack(side="left", padx=5)
-
-        self.progress_bar = ctk.CTkProgressBar(self.tab_scan, width=400, progress_color=CYAN, fg_color="#002226")
-        self.progress_bar.pack(pady=10)
+        self.progress_bar = ctk.CTkProgressBar(self.tab_scan, height=6, corner_radius=3,
+                                               progress_color=ACCENT, fg_color=BORDER)
+        self.progress_bar.pack(fill="x", padx=16, pady=(0, 10))
         self.progress_bar.set(0)
 
-        self.textbox = ctk.CTkTextbox(self.tab_scan, width=600, height=150, fg_color="black", text_color=GREEN,
-                                      font=("Consolas", 12), border_color=CYAN, border_width=1)
-        self.textbox.pack(pady=10)
+        ctk.CTkLabel(self.tab_scan, text="Journal d'activité", font=F_PETIT, text_color=TEXT_MUTED).pack(anchor="w", padx=16)
+        self.textbox = ctk.CTkTextbox(self.tab_scan, height=110, corner_radius=8, fg_color=SURFACE_2,
+                                      text_color=TEXT_MUTED, font=F_MONO, border_width=1, border_color=BORDER)
+        self.textbox.pack(fill="x", padx=16, pady=(4, 10))
 
-        self.scrollable_frame = ctk.CTkScrollableFrame(
-            self.tab_scan,
-            label_text="⚡ JEUX DÉTECTÉS",
-            label_font=("Consolas", 13, "bold"),
-            label_text_color=CYAN,
-            label_fg_color="#0a0b10",
-            fg_color="#0a0b10",
-            corner_radius=10,
-            border_width=1,
-            border_color=CYAN,
-            scrollbar_fg_color="#12131a",
-            scrollbar_button_color="#ff0055",
-            scrollbar_button_hover_color="#ff5599",
-        )
-        self.scrollable_frame.pack(pady=10, padx=15, fill="both", expand=True)
+        self.scrollable_frame = zone_liste(self.tab_scan, "Jeux détectés")
+        self.scrollable_frame.pack(fill="both", expand=True, padx=16, pady=(0, 14))
 
     def analyser_systeme(self):
-        """Lance le scan complet, avec animation de la barre de progression"""
-        self.textbox.delete("0.0", "end")
-        self.textbox.insert("end", ">> INITIALISATION DU SCAN...\n")
+        """Analyse complète, avec une barre de progression."""
+        self.journal("Analyse en cours…", effacer=True)
         self.animer_barre(0)
 
     def animer_barre(self, valeur):
@@ -358,29 +404,28 @@ class GameFixerApp(ctk.CTk):
             self.executer_analyse_reelle()
 
     def executer_analyse_reelle(self):
-        self.textbox.insert("end", ">> LECTURE DES BIBLIOTHÈQUES (STEAM + EPIC + BATTLE.NET)...\n")
+        self.journal("Lecture des bibliothèques Steam, Epic Games et Battle.net…")
         jeux_detectes = self.detecter_tous_les_jeux()
 
         if not jeux_detectes:
-            self.textbox.insert("end", "[!] AUCUNE BIBLIOTHÈQUE / AUCUN JEU DÉTECTÉ.\n")
+            self.journal("Aucun jeu détecté. Vérifie qu'un launcher est bien installé sur ce PC.")
             return
 
         jeux_avec_infos = self.croiser_avec_base_de_donnees(jeux_detectes)
         nb_connus = sum(1 for j in jeux_avec_infos if j["infos"])
-        self.textbox.insert("end", f">> {len(jeux_avec_infos)} JEU(X) DÉTECTÉ(S), {nb_connus} AVEC BUG CONNU.\n")
+        self.journal(f"{len(jeux_avec_infos)} jeu(x) détecté(s), dont {nb_connus} avec un bug connu.")
         self.afficher_jeux_detectes(jeux_avec_infos)
 
     def lancer_auto_detection(self):
-        """Détection instantanée, sans animation (utilise la même logique que le scan complet)"""
-        self.textbox.insert("end", "\n[ SYSTEM ] : Scan des launchers installés...\n")
+        """Détection instantanée, sans animation (même logique que l'analyse complète)."""
+        self.journal("Détection rapide des jeux installés…")
         jeux_detectes = self.detecter_tous_les_jeux()
         jeux_avec_infos = self.croiser_avec_base_de_donnees(jeux_detectes)
+        self.journal(f"{len(jeux_avec_infos)} jeu(x) détecté(s).")
         self.afficher_jeux_detectes(jeux_avec_infos)
 
     def afficher_jeux_detectes(self, jeux_avec_infos):
-        """Peuple la liste déroulante avec, pour chaque jeu, son statut et un bouton d'action dédié.
-        FIX : chaque jeu a maintenant son propre bouton (avant, seul le dernier jeu détecté
-        était réparable via un bouton unique)."""
+        """Une carte par jeu, avec son statut et ses actions."""
         for child in self.scrollable_frame.winfo_children():
             child.destroy()
 
@@ -388,53 +433,42 @@ class GameFixerApp(ctk.CTk):
             nom, appid, infos = jeu["nom"], jeu["id"], jeu["infos"]
             plateforme = jeu.get("plateforme", "Steam")
 
-            ligne = ctk.CTkFrame(self.scrollable_frame, fg_color="gray20")
-            ligne.pack(pady=5, padx=5, fill="x")
+            c = carte(self.scrollable_frame)
+            c.pack(fill="x", padx=6, pady=4)
 
-            entete = ctk.CTkFrame(ligne, fg_color="transparent")
-            entete.pack(fill="x")
-            ctk.CTkLabel(entete, text="", image=obtenir_icone("manette", "#aaaaaa", 16)).pack(side="left", padx=(10, 4), pady=5)
-            ctk.CTkLabel(entete, text=nom[:30], font=("Consolas", 12, "bold")).pack(side="left")
-            ctk.CTkLabel(entete, text=plateforme.upper(), font=("Consolas", 9, "bold"),
-                        text_color="#888888").pack(side="left", padx=5)
+            entete = ctk.CTkFrame(c, fg_color="transparent")
+            entete.pack(fill="x", padx=12, pady=(10, 4))
+            ctk.CTkLabel(entete, text="", image=obtenir_icone("manette", TEXT_MUTED, 18)).pack(side="left", padx=(0, 8))
+            ctk.CTkLabel(entete, text=nom[:40], font=F_CORPS_GRAS, text_color=TEXT).pack(side="left")
+            badge(entete, plateforme, TEXT_MUTED, SURFACE_2).pack(side="left", padx=8)
 
             if infos:
-                ctk.CTkLabel(entete, text="BUG CONNU", font=("Consolas", 10, "bold"), text_color=MAGENTA).pack(side="right", padx=10)
-                ctk.CTkLabel(ligne, text=f"Symptôme : {infos.get('bug', 'N/A')}", font=("Consolas", 10),
-                            text_color="#aaaaaa", wraplength=500, justify="left").pack(anchor="w", padx=15)
-                ctk.CTkLabel(ligne, text=f"Solution : {infos.get('solution', 'N/A')}", font=("Consolas", 10),
-                            text_color=GREEN, wraplength=500, justify="left").pack(anchor="w", padx=15, pady=(0, 5))
+                badge(entete, "Bug connu", WARNING, WARNING_SOFT).pack(side="right")
+                ctk.CTkLabel(c, text=f"Symptôme : {infos.get('bug', 'Non renseigné')}", font=F_PETIT,
+                             text_color=TEXT_MUTED, wraplength=540, justify="left").pack(anchor="w", padx=38)
+                ctk.CTkLabel(c, text=f"Solution : {infos.get('solution', 'Non renseignée')}", font=F_PETIT,
+                             text_color=TEXT, wraplength=540, justify="left").pack(anchor="w", padx=38, pady=(2, 0))
             else:
-                ctk.CTkLabel(entete, text="Aucun bug connu", font=("Consolas", 10), text_color="#666666").pack(side="right", padx=10)
+                ctk.CTkLabel(entete, text="Aucun bug connu", font=F_PETIT, text_color=TEXT_MUTED).pack(side="right")
 
-            boutons_action = ctk.CTkFrame(ligne, fg_color="transparent")
-            boutons_action.pack(pady=(0, 8))
+            actions = ctk.CTkFrame(c, fg_color="transparent")
+            actions.pack(anchor="w", padx=38, pady=(8, 12))
 
             if plateforme == "Steam" and appid:
-                ctk.CTkButton(boutons_action, text="VÉRIFIER LES FICHIERS", width=190, fg_color=MAGENTA,
-                             hover_color="#cc00cc", image=obtenir_icone("cle", "white", 16), compound="left",
-                             command=lambda i=appid, n=nom: self.reparer_jeu_specifique(i, n)).pack(side="left", padx=3)
+                bouton_primaire(actions, "Vérifier les fichiers", "cle",
+                                lambda i=appid, n=nom: self.reparer_jeu_specifique(i, n)).pack(side="left", padx=(0, 8))
             elif plateforme == "Epic":
-                ctk.CTkButton(boutons_action, text="OUVRIR EPIC LAUNCHER", width=190, fg_color=MAGENTA,
-                             hover_color="#cc00cc", image=obtenir_icone("fusee", "white", 16), compound="left",
-                             command=lambda n=nom: self.ouvrir_epic_launcher(n)).pack(side="left", padx=3)
+                bouton_primaire(actions, "Ouvrir Epic Games", "fusee",
+                                lambda n=nom: self.ouvrir_epic_launcher(n)).pack(side="left", padx=(0, 8))
             else:
-                ctk.CTkButton(boutons_action, text="COMMENT RÉPARER", width=190, fg_color="#444444",
-                             hover_color="#5a5a5a", image=obtenir_icone("info", "white", 16), compound="left",
-                             command=lambda n=nom: self.afficher_instructions_manuelles(n)).pack(side="left", padx=3)
+                bouton_secondaire(actions, "Comment réparer", "info",
+                                  lambda n=nom: self.afficher_instructions_manuelles(n)).pack(side="left", padx=(0, 8))
 
-            ctk.CTkButton(boutons_action, text="ANALYSER LES CRASHS", width=190, fg_color="#1a1a3d",
-                         border_color=CYAN, border_width=1, hover_color="#26264d",
-                         image=obtenir_icone("diagnostic", CYAN, 16), compound="left",
-                         command=lambda n=nom: self.analyser_crashs_jeu(n)).pack(side="left", padx=3)
-
+            bouton_secondaire(actions, "Rechercher des plantages", "diagnostic",
+                              lambda n=nom: self.analyser_crashs_jeu(n)).pack(side="left")
 
     # ---------------------------------------------------------------
-    # DÉTECTION STEAM (logique unifiée, avant dupliquée à deux endroits)
-    # ---------------------------------------------------------------
-
-    # ---------------------------------------------------------------
-    # DIAGNOSTIC SYSTÈME (espace disque, RAM, pilote GPU, crashs)
+    # DIAGNOSTIC SYSTÈME (espace disque, RAM, pilote GPU, plantages)
     # ---------------------------------------------------------------
 
     def obtenir_espace_disque(self, lettre_disque):
@@ -468,8 +502,8 @@ class GameFixerApp(ctk.CTk):
             return None, None
 
     def obtenir_info_gpu(self):
-        """⚠️ EXPÉRIMENTAL : liste les cartes graphiques et la date de leur pilote via
-        PowerShell/WMI. Retourne une liste de (nom, date_lisible_ou_None)."""
+        """EXPÉRIMENTAL : liste les cartes graphiques et la date de leur pilote via
+        PowerShell/WMI. Retourne une liste de (nom, date_ou_None)."""
         try:
             resultat = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
@@ -484,10 +518,10 @@ class GameFixerApp(ctk.CTk):
             donnees = [donnees]
 
         cartes = []
-        for carte in donnees or []:
-            nom = carte.get("Name") or "Carte graphique inconnue"
+        for carte_gpu in donnees or []:
+            nom = carte_gpu.get("Name") or "Carte graphique inconnue"
             date_lisible = None
-            m = re.search(r"/Date\((\d+)", str(carte.get("DriverDate", "")))
+            m = re.search(r"/Date\((\d+)", str(carte_gpu.get("DriverDate", "")))
             if m:
                 try:
                     date_lisible = datetime.datetime.fromtimestamp(int(m.group(1)) / 1000)
@@ -498,8 +532,7 @@ class GameFixerApp(ctk.CTk):
 
     def lister_disques_a_verifier(self):
         """Le disque système + tous ceux qui hébergent une bibliothèque Steam détectée.
-        FIX : dédoublonne en ignorant la casse — Windows ne fait pas la différence entre
-        "C:\\" et "c:\\", mais une simple comparaison de texte si."""
+        Dédoublonne en ignorant la casse (Windows ne distingue pas "C:\\" de "c:\\")."""
         disques = []
         cles_vues = set()
 
@@ -515,20 +548,28 @@ class GameFixerApp(ctk.CTk):
 
         return sorted(disques, key=str.lower)
 
-    def ajouter_ligne_diagnostic(self, nom_icone, titre, statut, detail, couleur):
-        """Affiche une ligne de résultat colorée (vert=OK, orange=attention, rouge=critique)."""
-        ligne = ctk.CTkFrame(self.frame_diagnostic, fg_color="gray20")
-        ligne.pack(pady=4, padx=5, fill="x")
+    def ajouter_ligne_diagnostic(self, nom_icone, titre, statut, detail, niveau):
+        """Une carte de résultat. niveau : 'ok', 'attention', 'critique' ou 'na'."""
+        styles = {
+            "ok": ("OK", SUCCESS, SUCCESS_SOFT),
+            "attention": (statut, WARNING, WARNING_SOFT),
+            "critique": (statut, DANGER, DANGER_SOFT),
+            "na": ("Non disponible", TEXT_MUTED, SURFACE_2),
+        }
+        texte_badge, couleur_texte, couleur_fond = styles[niveau]
 
-        entete = ctk.CTkFrame(ligne, fg_color="transparent")
-        entete.pack(fill="x")
-        ctk.CTkLabel(entete, text="", image=obtenir_icone(nom_icone, "#aaaaaa", 18)).pack(side="left", padx=(10, 6), pady=6)
-        ctk.CTkLabel(entete, text=titre, font=("Consolas", 12, "bold")).pack(side="left")
-        ctk.CTkLabel(entete, text=statut, font=("Consolas", 10, "bold"), text_color=couleur).pack(side="right", padx=10)
+        c = carte(self.frame_diagnostic)
+        c.pack(fill="x", padx=6, pady=4)
+
+        entete = ctk.CTkFrame(c, fg_color="transparent")
+        entete.pack(fill="x", padx=12, pady=(10, 2))
+        ctk.CTkLabel(entete, text="", image=obtenir_icone(nom_icone, TEXT_MUTED, 18)).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(entete, text=titre, font=F_CORPS_GRAS, text_color=TEXT).pack(side="left")
+        badge(entete, texte_badge, couleur_texte, couleur_fond).pack(side="right")
 
         if detail:
-            ctk.CTkLabel(ligne, text=detail, font=("Consolas", 10), text_color="#aaaaaa",
-                        wraplength=550, justify="left").pack(anchor="w", padx=15, pady=(0, 6))
+            ctk.CTkLabel(c, text=detail, font=F_PETIT, text_color=TEXT_MUTED,
+                         wraplength=540, justify="left").pack(anchor="w", padx=38, pady=(0, 10))
 
     def lancer_diagnostic_systeme(self):
         """Vérifie l'espace disque, la RAM et l'âge du pilote GPU — les causes les plus
@@ -542,81 +583,73 @@ class GameFixerApp(ctk.CTk):
             if libre is None:
                 continue
             if libre < 10:
-                statut, couleur = "CRITIQUE", ROUGE
+                statut, niveau = "Critique", "critique"
             elif libre < 25:
-                statut, couleur = "ATTENTION", ORANGE
+                statut, niveau = "Attention", "attention"
             else:
-                statut, couleur = "OK", GREEN
-            self.ajouter_ligne_diagnostic(
-                "disque", f"Disque {disque}", statut, f"{libre} Go libres sur {total} Go", couleur,
-            )
+                statut, niveau = "OK", "ok"
+            self.ajouter_ligne_diagnostic("disque", f"Disque {disque}", statut,
+                                          f"{libre} Go libres sur {total} Go", niveau)
 
         # --- RAM ---
         libre_ram, total_ram = self.obtenir_ram()
         if total_ram is not None:
             if total_ram < 8:
-                statut, couleur = "FAIBLE", ORANGE
-                detail = f"{total_ram} Go au total ({libre_ram} Go libres) — 8 Go+ recommandés pour les jeux récents"
+                self.ajouter_ligne_diagnostic(
+                    "puce", "Mémoire RAM", "Faible",
+                    f"{total_ram} Go au total ({libre_ram} Go libres). 8 Go ou plus sont recommandés pour les jeux récents.",
+                    "attention",
+                )
             else:
-                statut, couleur = "OK", GREEN
-                detail = f"{total_ram} Go au total, {libre_ram} Go libres actuellement"
-            self.ajouter_ligne_diagnostic("puce", "Mémoire RAM", statut, detail, couleur)
+                self.ajouter_ligne_diagnostic(
+                    "puce", "Mémoire RAM", "OK",
+                    f"{total_ram} Go au total, {libre_ram} Go libres actuellement.", "ok",
+                )
         else:
-            self.ajouter_ligne_diagnostic("puce", "Mémoire RAM", "N/A", "Impossible de lire la RAM sur ce système", "#666666")
+            self.ajouter_ligne_diagnostic("puce", "Mémoire RAM", "", "Impossible de lire la mémoire sur ce système.", "na")
 
         # --- GPU / pilote ---
         cartes = self.obtenir_info_gpu()
         if not cartes:
-            self.ajouter_ligne_diagnostic("moniteur", "Carte graphique", "N/A",
-                                          "Impossible de lire les infos GPU (nécessite PowerShell)", "#666666")
+            self.ajouter_ligne_diagnostic("moniteur", "Carte graphique", "",
+                                          "Impossible de lire les informations de la carte graphique (PowerShell requis).", "na")
         else:
             for nom, date_pilote in cartes:
                 if date_pilote is None:
-                    self.ajouter_ligne_diagnostic("moniteur", nom, "N/A", "Date du pilote inconnue", "#666666")
+                    self.ajouter_ligne_diagnostic("moniteur", nom, "", "Date du pilote inconnue.", "na")
                     continue
                 age_jours = (datetime.datetime.now() - date_pilote).days
                 if age_jours > 365:
-                    statut, couleur = "PILOTE ANCIEN", ORANGE
+                    self.ajouter_ligne_diagnostic(
+                        "moniteur", nom, "Pilote ancien",
+                        f"Pilote du {date_pilote.strftime('%d/%m/%Y')} ({age_jours} jours). "
+                        "Un pilote très ancien est une cause fréquente de plantages et de bugs graphiques.",
+                        "attention",
+                    )
                 else:
-                    statut, couleur = "OK", GREEN
-                self.ajouter_ligne_diagnostic(
-                    "moniteur", nom, statut,
-                    f"Pilote du {date_pilote.strftime('%d/%m/%Y')} ({age_jours} jours) — "
-                    "un pilote très ancien est une cause fréquente de plantages/bugs graphiques",
-                    couleur,
-                )
+                    self.ajouter_ligne_diagnostic(
+                        "moniteur", nom, "OK",
+                        f"Pilote du {date_pilote.strftime('%d/%m/%Y')} ({age_jours} jours).", "ok",
+                    )
 
     def setup_diagnostic_tab(self):
-        """Onglet de diagnostic système général (indépendant d'un jeu précis)."""
-        titre_section(self.tab_diag, "diagnostic", "DIAGNOSTIC SYSTÈME", CYAN).pack(pady=15)
-        ctk.CTkLabel(self.tab_diag,
-                    text="Vérifie les causes les plus fréquentes de plantages/bugs, tous jeux confondus.",
-                    font=FONT_SOUS_TITRE, text_color="#8a8aa0", wraplength=550).pack(pady=(0, 10))
+        titre_section(
+            self.tab_diag, "diagnostic", "Santé du système",
+            "Vérifie les causes les plus fréquentes de plantages, tous jeux confondus : espace disque, mémoire, pilote graphique.",
+        ).pack(anchor="w", padx=16, pady=(14, 10))
 
-        ctk.CTkButton(self.tab_diag, text="LANCER LE DIAGNOSTIC", border_color=CYAN, border_width=2,
-                     fg_color="transparent", text_color=CYAN, hover_color="#062226",
-                     image=obtenir_icone("diagnostic", CYAN, 16), compound="left",
-                     command=self.lancer_diagnostic_systeme).pack(pady=5)
+        bouton_primaire(self.tab_diag, "Lancer le diagnostic", "diagnostic",
+                        self.lancer_diagnostic_systeme).pack(anchor="w", padx=16, pady=(0, 12))
 
-        self.frame_diagnostic = ctk.CTkScrollableFrame(
-            self.tab_diag,
-            label_text="RÉSULTATS",
-            label_font=("Consolas", 12, "bold"),
-            label_text_color=CYAN,
-            label_fg_color="#0a0b10",
-            fg_color="#0a0b10",
-            corner_radius=10,
-            border_width=1,
-            border_color=CYAN,
-        )
-        self.frame_diagnostic.pack(pady=15, padx=15, fill="both", expand=True)
+        self.frame_diagnostic = zone_liste(self.tab_diag, "Résultats")
+        self.frame_diagnostic.pack(fill="both", expand=True, padx=16, pady=(0, 14))
 
     def analyser_crashs_jeu(self, nom_jeu):
-        """⚠️ EXPÉRIMENTAL : cherche des crashs récents ("Erreur d'application", Event ID
+        """EXPÉRIMENTAL : cherche des plantages récents ("Erreur d'application", Event ID
         1000) dans le Journal d'événements Windows mentionnant ce jeu. Ne nécessite pas
-        de droits administrateur. Le format exact du texte peut varier selon la langue
-        et la version de Windows — best effort, à valider en conditions réelles."""
-        self.textbox.insert("end", f"\n[ DIAG ] : Recherche de crashs récents pour {nom_jeu}...\n")
+        de droits administrateur. Le format du texte peut varier selon la langue et la
+        version de Windows — à valider en conditions réelles."""
+        self.journal(f"Recherche de plantages récents pour {nom_jeu}…")
         try:
             resultat = subprocess.run(
                 ["wevtutil", "qe", "Application",
@@ -625,7 +658,7 @@ class GameFixerApp(ctk.CTk):
                 capture_output=True, text=True, timeout=15,
             )
         except (OSError, subprocess.SubprocessError):
-            self.textbox.insert("end", "[!] Impossible de lire le Journal d'événements Windows.\n")
+            self.journal("Impossible de lire le Journal d'événements Windows.")
             return
 
         sortie = resultat.stdout or ""
@@ -633,22 +666,21 @@ class GameFixerApp(ctk.CTk):
         trouvailles = [b for b in blocs if nom_jeu.lower() in b.lower()]
 
         if not trouvailles:
-            self.textbox.insert(
-                "end", f"[ OK ] : Aucun crash récent trouvé pour {nom_jeu} (150 dernières erreurs système passées en revue).\n"
-            )
+            self.journal(f"Aucun plantage récent trouvé pour {nom_jeu} (150 dernières erreurs passées en revue).")
             return
 
-        self.textbox.insert("end", f"[!] {len(trouvailles)} crash(s) récent(s) trouvé(s) mentionnant {nom_jeu} :\n")
+        self.journal(f"{len(trouvailles)} plantage(s) récent(s) mentionnant {nom_jeu} :")
         for bloc in trouvailles[:3]:
-            premiere_ligne = bloc.strip().splitlines()[0]
-            self.textbox.insert("end", f"    - {premiere_ligne}\n")
-        self.textbox.insert(
-            "end", "[ INFO ] : Détail complet dans l'Observateur d'événements Windows > Journaux Windows > Application.\n"
-        )
+            self.journal(f"   • {bloc.strip().splitlines()[0]}")
+        self.journal("Détail complet : Observateur d'événements Windows > Journaux Windows > Application.")
+
+    # ---------------------------------------------------------------
+    # DÉTECTION DES JEUX (Steam, Epic, Battle.net)
+    # ---------------------------------------------------------------
 
     def trouver_chemin_steam(self):
-        """Trouve le dossier d'installation de Steam via le registre Windows (méthode fiable,
-        fonctionne quel que soit le disque ou le nom de dossier choisi à l'installation)."""
+        """Dossier d'installation de Steam via le registre Windows (fiable, quel que soit
+        le disque ou le nom de dossier choisi à l'installation)."""
         if winreg is None:
             return None
 
@@ -668,11 +700,8 @@ class GameFixerApp(ctk.CTk):
         return None
 
     def trouver_dossiers_steamapps_via_config(self):
-        """Lit la vraie configuration Steam (libraryfolders.vdf) pour lister TOUTES les
-        bibliothèques déclarées, même sur un disque/dossier personnalisé.
-        FIX : la bibliothèque principale peut être listée à la fois via le registre et via
-        libraryfolders.vdf, parfois avec une casse ou des séparateurs différents (Windows
-        étant insensible à la casse) — on normalise avant de comparer pour éviter les doublons."""
+        """Lit la configuration Steam (libraryfolders.vdf) pour lister toutes les
+        bibliothèques déclarées. Dédoublonne en normalisant les chemins."""
         chemin_steam = self.trouver_chemin_steam()
         if not chemin_steam:
             return []
@@ -702,8 +731,7 @@ class GameFixerApp(ctk.CTk):
         return [d for d in dossiers if os.path.exists(d)]
 
     def trouver_dossiers_steamapps_par_balayage(self):
-        """Méthode de secours : devine les emplacements en scannant chaque lettre de disque.
-        Utilisée seulement si la lecture du registre/config Steam échoue."""
+        """Méthode de secours : devine les emplacements en scannant chaque lettre de disque."""
         dossiers = []
         for lettre in string.ascii_uppercase:
             base = f"{lettre}:\\"
@@ -716,16 +744,14 @@ class GameFixerApp(ctk.CTk):
         return dossiers
 
     def trouver_dossiers_steamapps(self):
-        """Retourne tous les dossiers 'steamapps' réels de Steam : d'abord via sa config
-        (fiable), et seulement si ça échoue, via le balayage des disques (secours)."""
+        """D'abord via la config Steam (fiable), sinon via le balayage des disques (secours)."""
         dossiers = self.trouver_dossiers_steamapps_via_config()
         if dossiers:
             return dossiers
         return self.trouver_dossiers_steamapps_par_balayage()
 
     def detecter_tous_les_jeux_steam(self):
-        """Lit les fichiers appmanifest*.acf pour lister tous les jeux réellement installés
-        (plus fiable qu'un simple matching de noms de dossiers)."""
+        """Lit les fichiers appmanifest*.acf pour lister tous les jeux installés."""
         jeux_trouves = []
         for steamapps in self.trouver_dossiers_steamapps():
             try:
@@ -746,8 +772,7 @@ class GameFixerApp(ctk.CTk):
         return jeux_trouves
 
     def detecter_tous_les_jeux_epic(self):
-        """Lit les manifestes (.item, au format JSON) d'Epic Games Launcher pour lister
-        les jeux installés. Emplacement fixe, pas besoin de deviner un chemin."""
+        """Lit les manifestes (.item, JSON) d'Epic Games Launcher. Emplacement fixe."""
         dossier_manifests = os.path.join(
             os.environ.get("PROGRAMDATA", r"C:\ProgramData"),
             "Epic", "EpicGamesLauncher", "Data", "Manifests",
@@ -767,18 +792,16 @@ class GameFixerApp(ctk.CTk):
                 if nom:
                     jeux_trouves.append({"nom": nom, "id": None, "plateforme": "Epic"})
             except (OSError, json.JSONDecodeError):
-                continue  # fichier .item mal formé ou illisible
+                continue
         return jeux_trouves
 
     # Dossiers trouvés dans product.db qui ne sont pas des jeux (le launcher lui-même, etc.)
     EXCLUS_BATTLENET = {"battle.net", "agent", "blizzard entertainment"}
 
     def detecter_tous_les_jeux_battlenet(self):
-        """⚠️ EXPÉRIMENTAL : Battle.net n'a pas de format ouvert comme Steam/Epic. Ses jeux
-        installés sont listés dans product.db, un fichier binaire (protobuf) sans schéma
-        officiel. On extrait ici les chemins d'installation lisibles directement dans le
-        fichier brut (comme la commande 'strings'), sans décoder le protobuf complet.
-        Peut remonter du bruit ou rater des jeux selon la version de Battle.net."""
+        """EXPÉRIMENTAL : Battle.net n'a pas de format ouvert. Ses jeux installés sont
+        listés dans product.db (binaire protobuf sans schéma officiel). On extrait les
+        chemins d'installation lisibles directement dans le fichier brut."""
         chemin_db = os.path.join(
             os.environ.get("PROGRAMDATA", r"C:\ProgramData"),
             "Battle.net", "Agent", "product.db",
@@ -793,9 +816,8 @@ class GameFixerApp(ctk.CTk):
         except OSError:
             return jeux_trouves
 
-        # Battle.net stocke ses chemins avec des slashs ("C:/Program Files/...") et non des
-        # antislashs comme le reste de Windows. On cherche un chemin qui commence par une
-        # lettre de disque, peu importe le séparateur utilisé.
+        # Battle.net stocke ses chemins avec des slashs ("C:/Program Files/..."),
+        # on accepte les deux séparateurs.
         chemins_bruts = re.findall(rb"[A-Za-z]:[\\/][ -~]{2,}", contenu_brut)
         noms_vus = set()
 
@@ -813,15 +835,12 @@ class GameFixerApp(ctk.CTk):
         return jeux_trouves
 
     def detecter_tous_les_jeux(self):
-        """Combine la détection de tous les launchers supportés (Steam + Epic + Battle.net).
-        FIX : dédoublonne par nom au cas où un même jeu remonterait deux fois (ex: chemin
-        dupliqué dans product.db, bibliothèque Steam comptée deux fois)."""
+        """Combine tous les launchers et dédoublonne par nom."""
         tous = (
             self.detecter_tous_les_jeux_steam()
             + self.detecter_tous_les_jeux_epic()
             + self.detecter_tous_les_jeux_battlenet()
         )
-
         cles_vues = set()
         resultat = []
         for jeu in tous:
@@ -832,7 +851,7 @@ class GameFixerApp(ctk.CTk):
         return resultat
 
     def croiser_avec_base_de_donnees(self, jeux_detectes):
-        """Associe à chaque jeu détecté sa fiche bug/solution si elle existe dans bugs_data.json."""
+        """Associe à chaque jeu détecté sa fiche bug/solution si elle existe dans la base."""
         data = self.charger_base_de_donnees()
         resultat = []
         for jeu in jeux_detectes:
@@ -848,140 +867,97 @@ class GameFixerApp(ctk.CTk):
 
     def reparer_jeu_specifique(self, steam_id, nom_jeu):
         """Lance la vérification d'intégrité Steam pour un jeu donné."""
-        self.textbox.insert("end", f"\n[ FIX ] : Lancement du protocole pour {nom_jeu}...\n")
         if steam_id:
             webbrowser.open(f"steam://validate/{steam_id}")
-            self.textbox.insert("end", "[ OK ] : Steam a ouvert la fenêtre de vérification.\n")
+            self.journal(f"Vérification des fichiers de {nom_jeu} lancée dans Steam.")
         else:
-            self.textbox.insert("end", "[!] PAS D'ID STEAM TROUVÉ.\n")
+            self.journal(f"Aucun identifiant Steam trouvé pour {nom_jeu}.")
 
     def ouvrir_epic_launcher(self, nom_jeu):
-        """Epic ne propose pas d'équivalent à steam://validate/ : on ouvre le launcher
-        et on indique la manip manuelle (Bibliothèque > ⋯ > Vérifier)."""
-        self.textbox.insert("end", f"\n[ INFO ] : Ouverture d'Epic Games Launcher pour {nom_jeu}...\n")
-        self.textbox.insert("end", "[ INFO ] : Dans Epic, clic sur les ⋯ du jeu > Vérifier.\n")
+        """Epic n'a pas d'équivalent à steam://validate : on ouvre le launcher et on
+        indique la manipulation à faire."""
         webbrowser.open("com.epicgames.launcher://start")
+        self.journal(f"Epic Games Launcher ouvert. Pour {nom_jeu} : Bibliothèque > menu ··· du jeu > Vérifier.")
 
     def afficher_instructions_manuelles(self, nom_jeu):
-        """Pour les plateformes sans vérification automatisée fiable (Battle.net...) :
-        on affiche la marche à suivre plutôt que de deviner une commande qui risquerait
-        de ne pas fonctionner."""
-        self.textbox.insert(
-            "end",
-            f"\n[ INFO ] : Pour {nom_jeu}, ouvre Battle.net > clique sur le jeu > "
-            "roue crantée ⚙ > Analyse et réparation.\n",
-        )
-
-
+        """Plateformes sans vérification automatisée fiable (Battle.net) : on donne la marche à suivre."""
+        self.journal(f"Pour {nom_jeu} : ouvre Battle.net > clique sur le jeu > roue crantée > Analyse et réparation.")
 
     # ---------------------------------------------------------------
-    # ONGLET COMMUNAUTÉ
+    # ONGLET "BASE DE SOLUTIONS"
     # ---------------------------------------------------------------
 
     def setup_community_tab(self):
-        """Interface de contribution + gestion (modifier/supprimer) de la base"""
-        titre_section(self.tab_commu, "crayon", "AJOUTER / MODIFIER UN JEU", MAGENTA).pack(pady=(12, 8))
+        titre_section(
+            self.tab_commu, "crayon", "Base de solutions",
+            "Ajoute ou corrige des solutions connues. Chaque entrée peut être proposée à la communauté.",
+        ).pack(anchor="w", padx=16, pady=(14, 10))
 
-        style_champ = {"width": 400, "height": 36, "fg_color": "black", "border_color": "#301050"}
+        self.ent_jeu = champ(self.tab_commu, "Nom du jeu (ex. : Cyberpunk 2077)")
+        self.ent_jeu.pack(anchor="w", padx=16, pady=(0, 6))
+        self.ent_id = champ(self.tab_commu, "Identifiant Steam (facultatif)")
+        self.ent_id.pack(anchor="w", padx=16, pady=(0, 6))
+        self.ent_bug = champ(self.tab_commu, "Symptôme observé (ex. : plantage au lancement)")
+        self.ent_bug.pack(anchor="w", padx=16, pady=(0, 6))
 
-        self.ent_jeu = ctk.CTkEntry(self.tab_commu, placeholder_text="NOM DU DOSSIER (ex: Cyberpunk 2077)", **style_champ)
-        self.ent_jeu.pack(pady=6)
-
-        self.ent_id = ctk.CTkEntry(self.tab_commu, placeholder_text="ID STEAM DU JEU", **style_champ)
-        self.ent_id.pack(pady=6)
-
-        self.ent_bug = ctk.CTkEntry(self.tab_commu, placeholder_text="DESCRIPTION DU SYMPTÔME", **style_champ)
-        self.ent_bug.pack(pady=6)
-
-        self.txt_sol = ctk.CTkTextbox(self.tab_commu, width=400, height=70,
-                                      fg_color="black", border_color="#301050", border_width=2)
-        self.txt_sol.pack(pady=6)
+        self.txt_sol = ctk.CTkTextbox(self.tab_commu, width=440, height=64, corner_radius=8, fg_color=SURFACE,
+                                      border_width=1, border_color=BORDER, text_color=TEXT, font=F_CORPS)
+        self.txt_sol.pack(anchor="w", padx=16, pady=(0, 8))
         self.txt_sol.insert("0.0", PLACEHOLDER_SOLUTION)
-        # FIX : le placeholder ne s'effaçait jamais et pouvait finir enregistré comme vraie solution
+        self.txt_sol.configure(text_color=TEXT_MUTED)
         self.txt_sol.bind("<FocusIn>", self._effacer_placeholder_solution)
         self.txt_sol.bind("<FocusOut>", self._restaurer_placeholder_solution)
 
         boutons_form = ctk.CTkFrame(self.tab_commu, fg_color="transparent")
-        boutons_form.pack(pady=8)
+        boutons_form.pack(anchor="w", padx=16, pady=(0, 6))
+        self.btn_save = bouton_primaire(boutons_form, "Enregistrer", "coche", self.ajouter_bug_commu)
+        self.btn_save.pack(side="left", padx=(0, 8))
+        bouton_secondaire(boutons_form, "Proposer à la communauté", "communaute",
+                          self.proposer_sur_github).pack(side="left", padx=(0, 8))
+        self.btn_annuler = bouton_secondaire(boutons_form, "Annuler", "croix", self.annuler_edition)
+        # Affiché seulement en mode modification
 
-        self.btn_save = ctk.CTkButton(boutons_form, text="VALIDER L'INJECTION",
-                                      fg_color="transparent", border_color=MAGENTA, border_width=2,
-                                      text_color=MAGENTA, hover_color="#2e002e",
-                                      font=("Consolas", 14, "bold"),
-                                      image=obtenir_icone("crayon", MAGENTA, 16), compound="left",
-                                      command=self.ajouter_bug_commu)
-        self.btn_save.pack(side="left", padx=5)
-
-        ctk.CTkButton(boutons_form, text="PROPOSER SUR GITHUB", fg_color="transparent",
-                     border_color=CYAN, border_width=2, text_color=CYAN, hover_color="#062226",
-                     image=obtenir_icone("communaute", CYAN, 16), compound="left",
-                     command=self.proposer_sur_github).pack(side="left", padx=5)
-
-        self.btn_annuler = ctk.CTkButton(boutons_form, text="ANNULER", fg_color="#444444",
-                                         hover_color="#5a5a5a",
-                                         image=obtenir_icone("croix", "white", 14), compound="left",
-                                         command=self.annuler_edition)
-        # Caché tant qu'on n'édite pas une entrée existante
-
-        # --- Partage manuel de la base (export/import JSON) ---
         boutons_partage = ctk.CTkFrame(self.tab_commu, fg_color="transparent")
-        boutons_partage.pack(pady=(0, 8))
+        boutons_partage.pack(anchor="w", padx=16, pady=(0, 10))
+        bouton_secondaire(boutons_partage, "Exporter", "upload", self.exporter_base).pack(side="left", padx=(0, 8))
+        bouton_secondaire(boutons_partage, "Importer", "download", self.importer_base).pack(side="left", padx=(0, 8))
+        bouton_secondaire(boutons_partage, "Mettre à jour depuis GitHub", "sync",
+                          self.synchroniser_github).pack(side="left")
 
-        ctk.CTkButton(boutons_partage, text="EXPORTER LA BASE", fg_color="transparent",
-                     border_color=CYAN, border_width=2, text_color=CYAN, hover_color="#062226",
-                     image=obtenir_icone("upload", CYAN, 16), compound="left",
-                     command=self.exporter_base).pack(side="left", padx=5)
-
-        ctk.CTkButton(boutons_partage, text="IMPORTER UNE BASE", fg_color="transparent",
-                     border_color=CYAN, border_width=2, text_color=CYAN, hover_color="#062226",
-                     image=obtenir_icone("download", CYAN, 16), compound="left",
-                     command=self.importer_base).pack(side="left", padx=5)
-
-        ctk.CTkButton(boutons_partage, text="SYNC GITHUB", fg_color="transparent",
-                     border_color=MAGENTA, border_width=2, text_color=MAGENTA, hover_color="#2e002e",
-                     image=obtenir_icone("sync", MAGENTA, 16), compound="left",
-                     command=self.synchroniser_github).pack(side="left", padx=5)
-
-        # --- Recherche + liste de la base actuelle ---
-        self.ent_recherche = ctk.CTkEntry(self.tab_commu, placeholder_text="Rechercher un jeu dans la base...",
-                                          width=400, height=32, fg_color="black", border_color=CYAN)
-        self.ent_recherche.pack(pady=(10, 6))
+        self.ent_recherche = champ(self.tab_commu, "Rechercher dans la base…")
+        self.ent_recherche.pack(anchor="w", padx=16, pady=(0, 8))
         self.ent_recherche.bind("<KeyRelease>", lambda e: self.rafraichir_liste_communaute(self.ent_recherche.get()))
 
-        self.scrollable_frame_commu = ctk.CTkScrollableFrame(
-            self.tab_commu,
-            label_text="📚 BASE ACTUELLE",
-            label_font=("Consolas", 12, "bold"),
-            label_text_color=CYAN,
-            label_fg_color="#0a0b10",
-            fg_color="#0a0b10",
-            corner_radius=10,
-            border_width=1,
-            border_color=CYAN,
-        )
-        self.scrollable_frame_commu.pack(pady=(0, 10), padx=15, fill="both", expand=True)
+        self.scrollable_frame_commu = zone_liste(self.tab_commu, "Entrées enregistrées")
+        self.scrollable_frame_commu.pack(fill="both", expand=True, padx=16, pady=(0, 14))
 
     def _effacer_placeholder_solution(self, event=None):
         if self.txt_sol.get("0.0", "end").strip() == PLACEHOLDER_SOLUTION:
             self.txt_sol.delete("0.0", "end")
+            self.txt_sol.configure(text_color=TEXT)
 
     def _restaurer_placeholder_solution(self, event=None):
         if not self.txt_sol.get("0.0", "end").strip():
             self.txt_sol.insert("0.0", PLACEHOLDER_SOLUTION)
+            self.txt_sol.configure(text_color=TEXT_MUTED)
 
-    def proposer_sur_github(self):
-        """Ouvre une issue GitHub pré-remplie avec le contenu du formulaire, pour que
-        n'importe quel utilisateur de l'appli puisse proposer une contribution avec son
-        propre compte GitHub — sans que l'appli n'ait jamais besoin de stocker un token."""
-        jeu = self.ent_jeu.get().strip()
-        steam_id = self.ent_id.get().strip()
-        bug = self.ent_bug.get().strip()
+    def _lire_formulaire(self):
         sol = self.txt_sol.get("0.0", "end").strip()
         if sol == PLACEHOLDER_SOLUTION:
             sol = ""
+        return (
+            self.ent_jeu.get().strip(),
+            self.ent_id.get().strip(),
+            self.ent_bug.get().strip(),
+            sol,
+        )
 
+    def proposer_sur_github(self):
+        """Ouvre une issue GitHub pré-remplie : l'utilisateur la soumet avec son propre
+        compte, l'appli n'a jamais besoin de stocker de token."""
+        jeu, steam_id, bug, sol = self._lire_formulaire()
         if not jeu:
-            messagebox.showwarning("Champ manquant", "Renseigne au moins le nom du jeu avant de proposer une contribution.")
+            messagebox.showwarning("Nom manquant", "Indique au moins le nom du jeu avant de proposer une contribution.")
             return
 
         titre = f"Nouveau bug : {jeu}"
@@ -996,27 +972,17 @@ class GameFixerApp(ctk.CTk):
             f"&body={urllib.parse.quote(corps)}&labels=contribution"
         )
         webbrowser.open(url)
-        self.textbox.insert(
-            "end", f"\n[ INFO ] : Page GitHub ouverte pour proposer {jeu}. "
-            "Connecte-toi avec ton compte GitHub pour valider la contribution.\n",
-        )
+        self.journal(f"Page GitHub ouverte pour proposer {jeu}. Connecte-toi avec ton compte GitHub pour valider.")
 
     def ajouter_bug_commu(self):
-        jeu = self.ent_jeu.get().strip()
-        steam_id = self.ent_id.get().strip()
-        bug = self.ent_bug.get().strip()
-        sol = self.txt_sol.get("0.0", "end").strip()
-        if sol == PLACEHOLDER_SOLUTION:
-            sol = ""
-
+        jeu, steam_id, bug, sol = self._lire_formulaire()
         if not jeu:
-            return  # On n'enregistre pas si le nom du jeu est vide
+            return
 
         try:
             data = self.charger_base_de_donnees()
 
-            # Si on modifiait une entrée et que le nom a changé, on retire l'ancienne
-            # clé pour ne pas laisser un doublon derrière soi
+            # En modification, si le nom a changé, on retire l'ancienne clé
             if self.jeu_en_edition and self.jeu_en_edition != jeu:
                 data.pop(self.jeu_en_edition, None)
 
@@ -1025,40 +991,38 @@ class GameFixerApp(ctk.CTk):
             with open(CHEMIN_DB, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
 
-            message = "✅ MODIFIÉ" if self.jeu_en_edition else "✅ INJECTION RÉUSSIE"
-            self.btn_save.configure(text=message, fg_color="green")
-            self.after(2000, lambda: self.btn_save.configure(text="VALIDER L'INJECTION", fg_color=MAGENTA))
+            self.btn_save.configure(text="Enregistré", fg_color=SUCCESS, hover_color=SUCCESS)
+            self.after(1800, lambda: self.btn_save.configure(text="Enregistrer", fg_color=ACCENT, hover_color=ACCENT_HOVER))
 
             self.annuler_edition()
             self.mettre_a_jour_compteur()
             self.rafraichir_liste_communaute(self.ent_recherche.get())
 
         except PermissionError:
-            self.textbox.insert("end", "[!] ERREUR : Fermez le fichier bugs_data.json pour enregistrer.\n")
+            messagebox.showerror("Fichier verrouillé", "Ferme le fichier bugs_data.json pour pouvoir enregistrer.")
 
     def exporter_base(self):
-        """Sauvegarde une copie de la base courante dans un fichier choisi par l'utilisateur,
-        pour pouvoir la partager (mail, Discord, clé USB...)."""
+        """Sauvegarde une copie de la base dans un fichier choisi par l'utilisateur."""
         chemin = filedialog.asksaveasfilename(
             defaultextension=".json",
             filetypes=[("Fichier JSON", "*.json")],
             initialfile="bugs_data_export.json",
-            title="Exporter la base de bugs",
+            title="Exporter la base de solutions",
         )
         if not chemin:
-            return  # L'utilisateur a annulé
+            return
 
         data = self.charger_base_de_donnees()
         with open(chemin, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
 
-        messagebox.showinfo("Export réussi", f"{len(data)} jeu(x) exporté(s) vers :\n{chemin}")
+        messagebox.showinfo("Export terminé", f"{len(data)} jeu(x) exporté(s) vers :\n{chemin}")
 
     def importer_base(self):
         """Fusionne une base externe (reçue d'un autre utilisateur) dans la base locale."""
         chemin = filedialog.askopenfilename(
             filetypes=[("Fichier JSON", "*.json")],
-            title="Importer une base de bugs",
+            title="Importer une base de solutions",
         )
         if not chemin:
             return
@@ -1067,57 +1031,48 @@ class GameFixerApp(ctk.CTk):
             with open(chemin, "r", encoding="utf-8") as f:
                 base_externe = json.load(f)
         except (json.JSONDecodeError, OSError):
-            messagebox.showerror("Erreur", "Ce fichier n'est pas une base de bugs valide.")
+            messagebox.showerror("Fichier invalide", "Ce fichier n'est pas une base de solutions valide.")
             return
 
         if not isinstance(base_externe, dict) or not base_externe:
-            messagebox.showerror("Erreur", "Ce fichier ne contient aucune entrée valide.")
+            messagebox.showerror("Fichier vide", "Ce fichier ne contient aucune entrée valide.")
             return
 
         self._fusionner_base_externe(base_externe, source="le fichier importé")
 
     def synchroniser_github(self):
         """Récupère la base communautaire publiée sur GitHub et la fusionne avec la base locale."""
-        if "TON-PSEUDO-GITHUB" in URL_GITHUB_RAW:
-            messagebox.showwarning(
-                "Configuration requise",
-                "Renseigne d'abord l'URL de ton dépôt dans URL_GITHUB_RAW, en haut de main.py "
-                "(sur GitHub : ouvre bugs_data.json > bouton \"Raw\" > copie l'URL).",
-            )
-            return
-
         try:
             reponse = requests.get(URL_GITHUB_RAW, timeout=10)
             reponse.raise_for_status()
             base_distante = reponse.json()
         except requests.RequestException:
-            messagebox.showerror("Erreur réseau", "Impossible de contacter GitHub. Vérifie ta connexion.")
+            messagebox.showerror("Connexion impossible", "Impossible de contacter GitHub. Vérifie ta connexion internet.")
             return
         except ValueError:
-            messagebox.showerror("Erreur", "Le fichier distant n'est pas un JSON valide.")
+            messagebox.showerror("Fichier invalide", "Le fichier distant n'est pas un JSON valide.")
             return
 
         if not isinstance(base_distante, dict) or not base_distante:
-            messagebox.showinfo("Synchronisation", "Aucune entrée trouvée sur le dépôt distant.")
+            messagebox.showinfo("Mise à jour", "Aucune entrée trouvée sur le dépôt distant.")
             return
 
         self._fusionner_base_externe(base_distante, source="GitHub")
 
     def _fusionner_base_externe(self, base_externe, source="la source externe"):
-        """Logique de fusion commune à l'import fichier et à la synchro GitHub."""
+        """Logique de fusion commune à l'import de fichier et à la mise à jour GitHub."""
         data = self.charger_base_de_donnees()
         nouveaux = [nom for nom in base_externe if nom not in data]
         conflits = [nom for nom in base_externe if nom in data]
 
         reponse = messagebox.askyesnocancel(
-            "Synchroniser la base",
+            "Mettre à jour la base",
             f"{len(nouveaux)} nouveau(x) jeu(x) depuis {source}.\n"
             f"{len(conflits)} jeu(x) déjà présent(s) dans ta base.\n\n"
-            "Oui = écraser tes entrées en conflit avec celles reçues\n"
-            "Non = garder tes entrées, ajouter seulement les nouveaux jeux\n"
-            "Annuler = ne rien faire",
+            "Oui : remplacer tes entrées en conflit par celles reçues\n"
+            "Non : garder tes entrées, ajouter seulement les nouveaux jeux\n"
+            "Annuler : ne rien faire",
         )
-
         if reponse is None:
             return
 
@@ -1144,21 +1099,25 @@ class GameFixerApp(ctk.CTk):
 
         self.ent_jeu.delete(0, "end")
         self.ent_jeu.insert(0, nom)
-
         self.ent_id.delete(0, "end")
         self.ent_id.insert(0, infos.get("id", ""))
-
         self.ent_bug.delete(0, "end")
         self.ent_bug.insert(0, infos.get("bug", ""))
 
         self.txt_sol.delete("0.0", "end")
-        self.txt_sol.insert("0.0", infos.get("solution") or PLACEHOLDER_SOLUTION)
+        solution = infos.get("solution") or ""
+        if solution:
+            self.txt_sol.insert("0.0", solution)
+            self.txt_sol.configure(text_color=TEXT)
+        else:
+            self.txt_sol.insert("0.0", PLACEHOLDER_SOLUTION)
+            self.txt_sol.configure(text_color=TEXT_MUTED)
 
-        self.btn_save.configure(text="METTRE À JOUR")
-        self.btn_annuler.pack(side="left", padx=5)
+        self.btn_save.configure(text="Mettre à jour")
+        self.btn_annuler.pack(side="left")
 
     def annuler_edition(self):
-        """Quitte le mode édition et vide le formulaire."""
+        """Quitte le mode modification et vide le formulaire."""
         self.jeu_en_edition = None
 
         self.ent_jeu.delete(0, "end")
@@ -1166,12 +1125,16 @@ class GameFixerApp(ctk.CTk):
         self.ent_bug.delete(0, "end")
         self.txt_sol.delete("0.0", "end")
         self.txt_sol.insert("0.0", PLACEHOLDER_SOLUTION)
+        self.txt_sol.configure(text_color=TEXT_MUTED)
 
-        self.btn_save.configure(text="VALIDER L'INJECTION")
+        self.btn_save.configure(text="Enregistrer")
         self.btn_annuler.pack_forget()
 
     def supprimer_jeu(self, nom):
-        """Retire définitivement une entrée de la base."""
+        """Retire une entrée de la base, après confirmation."""
+        if not messagebox.askyesno("Supprimer", f"Supprimer « {nom} » de la base ?"):
+            return
+
         data = self.charger_base_de_donnees()
         data.pop(nom, None)
 
@@ -1185,7 +1148,7 @@ class GameFixerApp(ctk.CTk):
         self.rafraichir_liste_communaute(self.ent_recherche.get())
 
     def rafraichir_liste_communaute(self, filtre=""):
-        """Affiche la liste des jeux de la base, filtrée par la recherche, avec actions par ligne."""
+        """Liste des jeux de la base, filtrée par la recherche, avec modifier/supprimer."""
         for child in self.scrollable_frame_commu.winfo_children():
             child.destroy()
 
@@ -1196,17 +1159,14 @@ class GameFixerApp(ctk.CTk):
             if filtre and filtre not in nom.lower():
                 continue
 
-            ligne = ctk.CTkFrame(self.scrollable_frame_commu, fg_color="gray20")
-            ligne.pack(pady=4, padx=5, fill="x")
+            c = carte(self.scrollable_frame_commu)
+            c.pack(fill="x", padx=6, pady=3)
 
-            ctk.CTkLabel(ligne, text=nom, font=("Consolas", 11)).pack(side="left", padx=10, pady=6)
+            ctk.CTkLabel(c, text=nom, font=F_CORPS, text_color=TEXT).pack(side="left", padx=12, pady=8)
 
-            ctk.CTkButton(ligne, text="", width=36, fg_color="#661111", hover_color="#8a1c1c",
-                         image=obtenir_icone("poubelle", "white", 15),
-                         command=lambda n=nom: self.supprimer_jeu(n)).pack(side="right", padx=(5, 10))
-            ctk.CTkButton(ligne, text="", width=36, fg_color="#301050", hover_color="#472170",
-                         image=obtenir_icone("crayon", "white", 15),
-                         command=lambda n=nom: self.charger_jeu_pour_edition(n)).pack(side="right", padx=5)
+            bouton_icone(c, "poubelle", lambda n=nom: self.supprimer_jeu(n),
+                         couleur=DANGER, survol=DANGER_SOFT).pack(side="right", padx=(4, 8))
+            bouton_icone(c, "crayon", lambda n=nom: self.charger_jeu_pour_edition(n)).pack(side="right")
 
     # ---------------------------------------------------------------
     # DIVERS
@@ -1219,9 +1179,8 @@ class GameFixerApp(ctk.CTk):
         return {}
 
     def mettre_a_jour_compteur(self):
-        """Compte les jeux dans le JSON et met à jour l'affichage."""
-        data = self.charger_base_de_donnees()
-        self.lbl_count.configure(text=f"BASE : {len(data)} JEU(X)")
+        nb = len(self.charger_base_de_donnees())
+        self.lbl_count.configure(text=f"{nb} jeu{'x' if nb > 1 else ''} dans la base")
 
 
 if __name__ == "__main__":
